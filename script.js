@@ -5,6 +5,7 @@ const invoiceNumber = document.getElementById("invoiceNumber");
 const invoiceAmount = document.getElementById("invoiceAmount");
 const paymentType = document.getElementById("paymentType");
 const partialAmount = document.getElementById("partialAmount");
+const withholdingTax = document.getElementById("withholdingTax");
 const addRecordBtn = document.getElementById("addRecordBtn");
 const recordsTableBody = document.getElementById("recordsTableBody");
 const chequeRegisterBody = document.getElementById("chequeRegisterBody");
@@ -50,7 +51,7 @@ function renderTable() {
       <td>${record.customerName}</td>
       <td>${record.invoiceNumber}</td>
       <td>${record.invoiceAmount.toFixed(2)}</td>
-      <td>${record.paid.toFixed(2)}</td>
+      <td>${record.netAmount.toFixed(2)}</td>
     `;
     chequeRegisterBody.appendChild(chequeRow);
 
@@ -59,7 +60,7 @@ function renderTable() {
       <td>${record.customerName}</td>
       <td>${record.invoiceNumber}</td>
       <td>${record.paymentType}</td>
-      <td>${record.paid.toFixed(2)}</td>
+      <td>${record.netAmount.toFixed(2)}</td>
     `;
     paymentReceivedBody.appendChild(paymentRow);
   });
@@ -75,6 +76,7 @@ addRecordBtn.addEventListener("click", () => {
   const amount = Number(invoiceAmount.value);
   const type = paymentType.value;
   const partial = Number(partialAmount.value);
+  const tax = Number(withholdingTax.value) || 0;
 
   if (!name || !invNo || !amount || !type) {
     alert("Please complete all required fields.");
@@ -94,6 +96,12 @@ addRecordBtn.addEventListener("click", () => {
   }
 
   const remaining = amount - paid;
+  const netAmount = paid - tax;
+
+  if (netAmount < 0) {
+    alert("Withholding tax cannot be greater than paid amount.");
+    return;
+  }
 
   records.push({
     customerName: name,
@@ -101,7 +109,8 @@ addRecordBtn.addEventListener("click", () => {
     invoiceAmount: amount,
     paymentType: type,
     paid: paid,
-    remaining: remaining
+    remaining: remaining,
+    netAmount: netAmount
   });
 
   customerName.value = "";
@@ -109,6 +118,7 @@ addRecordBtn.addEventListener("click", () => {
   invoiceAmount.value = "";
   paymentType.value = "";
   partialAmount.value = "";
+  withholdingTax.value = "";
 
   renderTable();
 });
