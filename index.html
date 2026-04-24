@@ -12,8 +12,8 @@
     <p class="subtitle">Invoice and payment tracker</p>
 
     <div class="tabs">
-      <button id="recordsTabBtn" class="tab-btn active" type="button">Records</button>
-      <button id="reportsTabBtn" class="tab-btn" type="button">Reports</button>
+      <button id="recordsTabBtn" class="tab-btn action-btn active" type="button">Records</button>
+      <button id="reportsTabBtn" class="tab-btn action-btn" type="button">Reports</button>
     </div>
 
     <div class="card tab-panel" id="recordsPanel">
@@ -41,7 +41,9 @@
       <label>Withholding Tax Amount</label>
       <input type="number" id="withholdingTax" placeholder="Enter withholding tax amount" />
 
-      <button id="addRecordBtn">Add Record</button>
+      <div class="form-actions">
+        <button id="addRecordBtn" class="action-btn action-btn-primary">Add Record</button>
+      </div>
     </div>
 
     <div class="card tab-panel" id="summaryPanel">

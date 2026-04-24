@@ -26,8 +26,7 @@ h1 {
 }
 
 .tab-btn {
-  width: auto;
-  min-width: 120px;
+  min-width: 96px;
 }
 
 .tab-btn.active {
@@ -61,6 +60,28 @@ input, select, button {
 button {
   cursor: pointer;
   font-weight: bold;
+}
+
+.action-btn {
+  width: auto;
+  min-width: 88px;
+  padding: 6px 10px;
+  font-size: 12px;
+  line-height: 1.2;
+  border: 1px solid #c7ced8;
+  border-radius: 6px;
+  background: #e9edf5;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.action-btn-primary {
+  background: #1f5fbf;
+  border-color: #1f5fbf;
+  color: #fff;
 }
 
 table {
