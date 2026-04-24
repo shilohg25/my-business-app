@@ -1,17 +1,24 @@
 # My Business App
 
-This repository contains source snippets for a business operations dashboard.
+This repository has been restructured into a runnable **Next.js App Router** project.
 
-## Why GitHub Pages showed raw code
+## What's included
 
-GitHub Pages renders `README.md` when no `index.html` is present.
-The previous README contained raw TSX source, so it appeared as plain code text in the browser.
+- `src/app` application routes and global layout.
+- `src/components` for UI and dashboard layout components.
+- `src/lib` for utility helpers and domain logic (`types`, `calculations`, `validation`).
+- `public/logo.png` static brand asset used in the sidebar.
 
-## What was fixed
+## Run locally
 
-- Replaced the README with proper Markdown documentation.
-- Added a static `index.html` homepage so GitHub Pages serves a clean landing page instead of rendering source snippets.
+```bash
+npm install
+npm run dev
+```
 
-## Local development
+Open `http://localhost:3000`.
 
-This repository currently does **not** contain a runnable Next.js app structure (for example, there is no valid `package.json` script setup), so it is best treated as source/reference files unless restructured into a full app.
+## Notes
+
+- Home route redirects to `/dashboard`.
+- The dashboard is scaffolded and ready for integrating Supabase data and full operational modules.
