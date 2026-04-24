@@ -4,6 +4,7 @@ import {
   BarChart3,
   ClipboardList,
   Database,
+  HandCoins,
   FileInput,
   Fuel,
   Gauge,
@@ -11,6 +12,7 @@ import {
   Package,
   Settings
 } from "lucide-react";
+import logo from "../../../public/logo.png";
 
 const items = [
   { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
@@ -19,6 +21,7 @@ const items = [
   { href: "/shift-reports", label: "Shift Reports", icon: ClipboardList },
   { href: "/imports", label: "Imports", icon: FileInput },
   { href: "/reports", label: "Reports", icon: Database },
+  { href: "/expenses", label: "Expenses", icon: HandCoins },
   { href: "/inventory/lubricants", label: "Lubricants", icon: Package },
   { href: "/inventory/bodega", label: "Bodega", icon: Package },
   { href: "/audit-logs", label: "Audit Logs", icon: History },
@@ -30,7 +33,7 @@ export function Sidebar() {
     <aside className="no-print hidden w-72 shrink-0 border-r bg-white px-4 py-5 lg:block">
       <div className="mb-6 flex items-center gap-3">
         <div className="relative h-14 w-14 overflow-hidden rounded-full border bg-white">
-          <Image src="/logo.svg" alt="AKY logo" fill className="object-contain" priority />
+          <Image src={logo} alt="AKY logo" fill className="object-contain p-1" priority />
         </div>
         <div>
           <div className="font-semibold">AKY Fuel Ops</div>
