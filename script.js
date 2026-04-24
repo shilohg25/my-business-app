@@ -20,6 +20,11 @@ const recordsPanel = document.getElementById("recordsPanel");
 const summaryPanel = document.getElementById("summaryPanel");
 const recordsTablePanel = document.getElementById("recordsTablePanel");
 const reportsPanel = document.getElementById("reportsPanel");
+const statusOptions = ["pending", "cleared", "bounced"];
+
+function formatStatus(status) {
+  return status.charAt(0).toUpperCase() + status.slice(1);
+}
 
 function renderTable() {
   recordsTableBody.innerHTML = "";
@@ -30,7 +35,7 @@ function renderTable() {
   let paidSum = 0;
   let remainingSum = 0;
 
-  records.forEach((record) => {
+  records.forEach((record, index) => {
     invoiceSum += record.invoiceAmount;
     paidSum += record.paid;
     remainingSum += record.remaining;
@@ -43,6 +48,17 @@ function renderTable() {
       <td>${record.paymentType}</td>
       <td>${record.paid.toFixed(2)}</td>
       <td>${record.remaining.toFixed(2)}</td>
+      <td><span class="status-pill status-${record.status}">${formatStatus(record.status)}</span></td>
+      <td>
+        <select class="status-select" data-index="${index}">
+          ${statusOptions
+            .map(
+              (status) =>
+                `<option value="${status}" ${record.status === status ? "selected" : ""}>${formatStatus(status)}</option>`
+            )
+            .join("")}
+        </select>
+      </td>
     `;
     recordsTableBody.appendChild(row);
 
@@ -52,6 +68,7 @@ function renderTable() {
       <td>${record.invoiceNumber}</td>
       <td>${record.invoiceAmount.toFixed(2)}</td>
       <td>${record.netAmount.toFixed(2)}</td>
+      <td><span class="status-pill status-${record.status}">${formatStatus(record.status)}</span></td>
     `;
     chequeRegisterBody.appendChild(chequeRow);
 
@@ -63,6 +80,14 @@ function renderTable() {
       <td>${record.netAmount.toFixed(2)}</td>
     `;
     paymentReceivedBody.appendChild(paymentRow);
+  });
+
+  document.querySelectorAll(".status-select").forEach((select) => {
+    select.addEventListener("change", (event) => {
+      const { index } = event.target.dataset;
+      records[index].status = event.target.value;
+      renderTable();
+    });
   });
 
   totalInvoice.textContent = invoiceSum.toFixed(2);
@@ -110,7 +135,8 @@ addRecordBtn.addEventListener("click", () => {
     paymentType: type,
     paid: paid,
     remaining: remaining,
-    netAmount: netAmount
+    netAmount: netAmount,
+    status: "pending"
   });
 
   customerName.value = "";
