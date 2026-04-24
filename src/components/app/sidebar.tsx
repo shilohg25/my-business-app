@@ -1,5 +1,8 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   BarChart3,
   ClipboardList,
@@ -11,6 +14,7 @@ import {
   Package,
   Settings
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const items = [
   { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
@@ -26,6 +30,8 @@ const items = [
 ];
 
 export function Sidebar() {
+  const pathname = usePathname();
+
   return (
     <aside className="no-print hidden w-72 shrink-0 border-r bg-white px-4 py-5 lg:block">
       <div className="mb-6 flex items-center gap-3">
@@ -37,17 +43,27 @@ export function Sidebar() {
           <div className="text-xs text-slate-500">Owner/Admin console</div>
         </div>
       </div>
+
       <nav className="space-y-1">
-        {items.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
-          >
-            <item.icon className="h-4 w-4" />
-            {item.label}
-          </Link>
-        ))}
+        {items.map((item) => {
+          const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(
+                "flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition",
+                isActive
+                  ? "bg-slate-900 text-white"
+                  : "text-slate-700 hover:bg-slate-100 hover:text-slate-950"
+              )}
+            >
+              <item.icon className="h-4 w-4" />
+              {item.label}
+            </Link>
+          );
+        })}
       </nav>
     </aside>
   );
