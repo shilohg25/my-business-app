@@ -45,52 +45,81 @@ export function canUseLiveData() {
   return isSupabaseConfigured();
 }
 
+function requireLiveData() {
+  if (!canUseLiveData()) {
+    throw new Error("Supabase is not configured. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.");
+  }
+
+  return createSupabaseBrowserClient();
+}
+
 export async function getDashboardSummary(): Promise<DashboardSummary> {
   if (!canUseLiveData()) {
-    return { openShifts: 0, pendingReview: 0, discrepancyAlerts: 0, inventoryWarnings: 0 };
+    return {
+      openShifts: 0,
+      pendingReview: 0,
+      discrepancyAlerts: 0,
+      inventoryWarnings: 0
+    };
   }
 
   const supabase = createSupabaseBrowserClient();
-  const [{ count: draftCount }, { count: reviewCount }, { count: discrepancyCount }, { count: inventoryCount }] = await Promise.all([
+
+  const [draftResult, reviewResult, discrepancyResult, inventoryResult] = await Promise.all([
     supabase.from("fuel_shift_reports").select("id", { count: "exact", head: true }).eq("status", "draft"),
     supabase.from("fuel_shift_reports").select("id", { count: "exact", head: true }).in("status", ["submitted", "reviewed"]),
     supabase.from("fuel_shift_reports").select("id", { count: "exact", head: true }).neq("discrepancy_amount", 0),
     supabase.from("fuel_station_lubricant_inventory").select("id", { count: "exact", head: true }).lte("quantity_on_hand", 0)
   ]);
 
+  const results = [draftResult, reviewResult, discrepancyResult, inventoryResult];
+  const failedResult = results.find((result) => result.error);
+
+  if (failedResult?.error) {
+    throw failedResult.error;
+  }
+
   return {
-    openShifts: draftCount ?? 0,
-    pendingReview: reviewCount ?? 0,
-    discrepancyAlerts: discrepancyCount ?? 0,
-    inventoryWarnings: inventoryCount ?? 0
+    openShifts: draftResult.count ?? 0,
+    pendingReview: reviewResult.count ?? 0,
+    discrepancyAlerts: discrepancyResult.count ?? 0,
+    inventoryWarnings: inventoryResult.count ?? 0
   };
 }
 
 export async function listStations() {
   if (!canUseLiveData()) return [] as StationRow[];
+
   const supabase = createSupabaseBrowserClient();
   const { data, error } = await supabase
     .from("fuel_stations")
     .select("id, code, name, official_report_header, is_active")
-    .order("name");
+    .order("name", { ascending: true });
+
   if (error) throw error;
+
   return (data ?? []) as StationRow[];
 }
 
 export async function listShiftReports(limit = 25) {
   if (!canUseLiveData()) return [] as ShiftReportRow[];
+
   const supabase = createSupabaseBrowserClient();
   const { data, error } = await supabase
     .from("fuel_shift_reports")
     .select("id, report_date, duty_name, shift_time_label, status, source, discrepancy_amount, calculated_totals, created_at, fuel_stations(name)")
     .order("report_date", { ascending: false })
+    .order("created_at", { ascending: false })
     .limit(limit);
+
   if (error) throw error;
+
   return (data ?? []) as ShiftReportRow[];
 }
 
 export async function listAuditLogs(limit = 50) {
   if (!canUseLiveData()) return [] as AuditLogRow[];
+
   const supabase = createSupabaseBrowserClient();
   const { data, error } = await supabase
     .from("audit_logs")
@@ -98,40 +127,61 @@ export async function listAuditLogs(limit = 50) {
     .like("entity_type", "fuel_%")
     .order("created_at", { ascending: false })
     .limit(limit);
+
   if (error) throw error;
+
   return (data ?? []) as AuditLogRow[];
 }
 
 export async function commitShiftReport(report: ShiftReportInput, importContext?: Record<string, unknown>) {
-  if (!canUseLiveData()) {
-    throw new Error("Supabase is not configured. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.");
-  }
-  const parsed = { ...report, calculatedPreview: calculateShiftReport(report) };
-  const supabase = createSupabaseBrowserClient();
+  const supabase = requireLiveData();
+
+  const payload = {
+    ...report,
+    calculatedPreview: calculateShiftReport(report)
+  };
+
   const { data, error } = await supabase.rpc("fuel_commit_shift_report", {
-    payload: parsed,
+    payload,
     import_context: importContext ?? null
   });
+
   if (error) throw error;
+  if (!data) throw new Error("Supabase did not return a report id.");
+
   return data as string;
 }
 
-export async function markReportStatus(reportId: string, status: "submitted" | "reviewed" | "approved", explanation?: string) {
-  const supabase = createSupabaseBrowserClient();
-  const patch: Record<string, unknown> = { status, edit_reason: explanation || `${status} from web app` };
+export async function markReportStatus(
+  reportId: string,
+  status: "submitted" | "reviewed" | "approved",
+  explanation?: string
+) {
+  const supabase = requireLiveData();
+
+  const patch: Record<string, unknown> = {
+    status,
+    edit_reason: explanation || `${status} from web app`
+  };
+
   if (status === "submitted") patch.submitted_at = new Date().toISOString();
   if (status === "reviewed") patch.reviewed_at = new Date().toISOString();
   if (status === "approved") patch.approved_at = new Date().toISOString();
+
   const { error } = await supabase.from("fuel_shift_reports").update(patch).eq("id", reportId);
+
   if (error) throw error;
 }
 
 export async function recordExport(reportId: string | null, reportType: string, exportFormat: string) {
   if (!canUseLiveData()) return;
+
   const supabase = createSupabaseBrowserClient();
-  await supabase.from("fuel_report_exports").insert({
+  const { error } = await supabase.from("fuel_report_exports").insert({
     shift_report_id: reportId,
     report_type: reportType,
     export_format: exportFormat
   });
+
+  if (error) throw error;
 }
