@@ -6,9 +6,13 @@ import type { ShiftReportInput } from "@/lib/domain/types";
 import { Button } from "@/components/ui/button";
 import { BalanceSummary } from "@/components/shift-reports/balance-summary";
 import { parseOsrWorkbook, type ImportWarning } from "@/lib/imports/osr-parser";
-import { commitShiftReport } from "@/lib/data/client";
+import { canUseLiveData, commitShiftReport } from "@/lib/data/client";
+import { getSupabaseConfigurationState } from "@/lib/supabase/client";
 
 export function ImportPreview() {
+  const liveData = canUseLiveData();
+  const config = getSupabaseConfigurationState();
+
   const [fileName, setFileName] = useState<string | null>(null);
   const [report, setReport] = useState<ShiftReportInput | null>(null);
   const [warnings, setWarnings] = useState<ImportWarning[]>([]);
@@ -21,24 +25,34 @@ export function ImportPreview() {
     setError(null);
     setMessage(null);
     setFileName(file.name);
+
     try {
       const buffer = await file.arrayBuffer();
       const parsed = parseOsrWorkbook(buffer);
+
       setReport(parsed.report);
       setWarnings(parsed.warnings ?? []);
       setWorkbookTotals(parsed.workbookTotals ?? {});
     } catch (err) {
       setReport(null);
       setWarnings([]);
+      setWorkbookTotals({});
       setError(err instanceof Error ? err.message : "Unable to parse workbook.");
     }
   }
 
   async function commit() {
     if (!report) return;
+
+    if (!liveData) {
+      setError(config.reason);
+      return;
+    }
+
     setCommitting(true);
     setMessage(null);
     setError(null);
+
     try {
       const reportId = await commitShiftReport(report, {
         sourceFileName: fileName,
@@ -46,6 +60,7 @@ export function ImportPreview() {
         warnings,
         workbookTotals
       });
+
       setMessage(`Imported and committed report ${reportId}.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Commit failed.");
@@ -59,6 +74,12 @@ export function ImportPreview() {
   return (
     <div className="space-y-5">
       <div className="rounded-2xl border bg-white p-5">
+        {!liveData ? (
+          <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+            Workbook preview works locally, but committing imports requires Supabase. {config.reason}
+          </p>
+        ) : null}
+
         <input
           type="file"
           accept=".xlsx,.xls"
@@ -67,6 +88,7 @@ export function ImportPreview() {
             if (file) void handleFile(file);
           }}
         />
+
         {fileName ? <p className="mt-2 text-sm text-slate-500">Selected: {fileName}</p> : null}
         {error ? <p className="mt-3 text-sm text-red-700">{error}</p> : null}
         {message ? <p className="mt-3 text-sm text-green-700">{message}</p> : null}
@@ -76,7 +98,9 @@ export function ImportPreview() {
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm">
           <div className="font-medium">Parsing warnings</div>
           <ul className="mt-2 list-disc pl-5">
-            {warnings.map((warning) => <li key={`${warning.code}-${warning.message}`}>{warning.message}</li>)}
+            {warnings.map((warning) => (
+              <li key={`${warning.code}-${warning.message}`}>{warning.message}</li>
+            ))}
           </ul>
         </div>
       ) : null}
@@ -86,12 +110,24 @@ export function ImportPreview() {
       {report ? (
         <div className="rounded-2xl border bg-white p-5">
           <div className="mb-3 grid gap-3 text-sm md:grid-cols-3">
-            <div><span className="text-slate-500">Date:</span> {report.reportDate}</div>
-            <div><span className="text-slate-500">Duty:</span> {report.dutyName || "-"}</div>
-            <div><span className="text-slate-500">Shift:</span> {report.shiftTimeLabel || "-"}</div>
+            <div>
+              <span className="text-slate-500">Date:</span> {report.reportDate}
+            </div>
+            <div>
+              <span className="text-slate-500">Duty:</span> {report.dutyName || "-"}
+            </div>
+            <div>
+              <span className="text-slate-500">Shift:</span> {report.shiftTimeLabel || "-"}
+            </div>
           </div>
-          <pre className="max-h-96 overflow-auto rounded-xl bg-slate-950 p-4 text-xs text-slate-100">{JSON.stringify(report, null, 2)}</pre>
-          <Button className="mt-4" onClick={commit} disabled={committing}>{committing ? "Committing..." : "Commit import"}</Button>
+
+          <pre className="max-h-96 overflow-auto rounded-xl bg-slate-950 p-4 text-xs text-slate-100">
+            {JSON.stringify(report, null, 2)}
+          </pre>
+
+          <Button className="mt-4" onClick={commit} disabled={committing || !liveData}>
+            {committing ? "Committing..." : liveData ? "Commit import" : "Connect Supabase to commit"}
+          </Button>
         </div>
       ) : null}
     </div>
