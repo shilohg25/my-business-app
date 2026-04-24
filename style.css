@@ -63,6 +63,16 @@ button {
   font-weight: bold;
 }
 
+.action-btn {
+  width: auto;
+  min-width: 96px;
+  padding: 7px 12px;
+  font-size: 13px;
+  border: 1px solid #c7ced8;
+  border-radius: 8px;
+  background: #eef2f8;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
