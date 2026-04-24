@@ -30,7 +30,7 @@ export function Sidebar() {
     <aside className="no-print hidden w-72 shrink-0 border-r bg-white px-4 py-5 lg:block">
       <div className="mb-6 flex items-center gap-3">
         <div className="relative h-14 w-14 overflow-hidden rounded-full border bg-white">
-          <Image src="/logo.png" alt="AKY logo" fill className="object-contain" priority />
+          <Image src="/logo.svg" alt="AKY logo" fill className="object-contain" priority />
         </div>
         <div>
           <div className="font-semibold">AKY Fuel Ops</div>
