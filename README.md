@@ -7,7 +7,7 @@ This repository has been restructured into a runnable **Next.js App Router** pro
 - `src/app` application routes and global layout.
 - `src/components` for UI and dashboard layout components.
 - `src/lib` for utility helpers and domain logic (`types`, `calculations`, `validation`).
-- `public/logo.png` static brand asset used in the sidebar.
+- `public/logo.svg` static brand asset used in the sidebar.
 
 ## Run locally
 
