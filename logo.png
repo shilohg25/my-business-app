@@ -1,0 +1,27 @@
+{
+  "workbook": "04-23-2026 Report  1-9pm rosalie(1).xlsx",
+  "sheets": [
+    "OSR1",
+    "OSR"
+  ],
+  "observed_cells": {
+    "OSR1!C1": "date",
+    "OSR1!C2": "duty/cashier",
+    "OSR1!C3": "shift time",
+    "OSR1!F5:I7": "price info with ADO/SPU/ULG and current prices",
+    "OSR1!O:R": "credit receipt tables",
+    "OSR1!F16:I23": "cash count",
+    "OSR1!A26:E36": "lubricant sales",
+    "OSR1!A38:E52": "expenses",
+    "OSR!D4:K15": "derived fuel formulas by product/pump",
+    "OSR!M15:M21": "fuel total, lube total, expected total, cash count, discrepancy"
+  },
+  "key_formulas": [
+    "liters = after - before",
+    "net cash liters = gross liters - credit liters - calibration liters",
+    "fuel cash amount = net cash liters * price",
+    "expected cash before expenses = total fuel cash sales + lubricant sales",
+    "workbook-style discrepancy = cash count - expected cash before expenses",
+    "operational net remittance = cash count - lubricant sales - expenses"
+  ]
+}
