@@ -20,7 +20,6 @@ export function sum(values: number[]) {
 }
 
 export function meterLiters(reading: MeterReadingInput) {
-  // Negative liters are allowed because the current process permits them.
   return round(reading.afterReading - reading.beforeReading, 3);
 }
 
@@ -105,18 +104,4 @@ export function calculateShiftReport(input: ShiftReportInput): ShiftCalculationR
     workbookStyleDiscrepancy: round(totalCashCount - expectedCashBeforeExpenses, 2),
     operationalNetRemittance: round(totalCashCount - totalLubricantSales - totalExpenses, 2)
   };
-}
-
-export function assertBalanced(input: ShiftReportInput, tolerance = 1) {
-  const result = calculateShiftReport(input);
-
-  if (Math.abs(result.workbookStyleDiscrepancy) > tolerance) {
-    return {
-      ok: false as const,
-      result,
-      message: `Report does not balance. Difference is ${result.workbookStyleDiscrepancy}.`
-    };
-  }
-
-  return { ok: true as const, result, message: "Balanced." };
 }

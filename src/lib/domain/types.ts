@@ -1,35 +1,16 @@
 export type EntrySource = "web_manual" | "excel_import" | "mobile_submission";
 
-export type ReportStatus = "draft" | "submitted" | "reviewed" | "approved" | "archived";
-
-export type FuelProductCode = "DIESEL" | "SPECIAL" | "UNLEADED" | string;
-
-export interface Station {
-  id: string;
-  code: string;
-  name: string;
-  officialReportHeader: string | null;
-  isActive: boolean;
-}
-
-export interface FuelProduct {
-  id: string;
-  code: FuelProductCode;
-  name: string;
-  isActive: boolean;
-}
-
 export interface MeterReadingInput {
   pumpId?: string;
   pumpLabel: string;
-  productCode: FuelProductCode;
+  productCode: string;
   beforeReading: number;
   afterReading: number;
   calibrationLiters?: number;
 }
 
 export interface CreditReceiptInput {
-  productCode: FuelProductCode;
+  productCode: string;
   companyName: string;
   receiptNumber?: string;
   liters: number;
@@ -58,7 +39,7 @@ export interface LubricantSaleInput {
 }
 
 export interface ProductPriceInput {
-  productCode: FuelProductCode;
+  productCode: string;
   price: number;
 }
 
@@ -79,7 +60,7 @@ export interface ShiftReportInput {
 }
 
 export interface ProductCalculation {
-  productCode: FuelProductCode;
+  productCode: string;
   grossLiters: number;
   creditLiters: number;
   calibrationLiters: number;

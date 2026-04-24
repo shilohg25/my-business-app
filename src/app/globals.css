@@ -6,10 +6,6 @@
   --muted: #f3f4f6;
   --muted-foreground: #6b7280;
   --border: #e5e7eb;
-  --primary: #0f172a;
-  --primary-foreground: #ffffff;
-  --destructive: #b91c1c;
-  --radius: 0.75rem;
 }
 
 * {
