@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AKY Fuel Ops</title>
+    <style>
+      :root { --bg:#f8fafc; --card:#fff; --ink:#0f172a; --muted:#64748b; --line:#e2e8f0; --accent:#facc15; }
+      * { box-sizing: border-box; }
+      body { margin:0; font-family: Arial, Helvetica, sans-serif; color:var(--ink); background:var(--bg); }
+      .shell { display:grid; grid-template-columns:280px 1fr; min-height:100vh; }
+      aside { background:#fff; border-right:1px solid var(--line); padding:22px; }
+      .brand { display:flex; gap:12px; align-items:center; margin-bottom:28px; }
+      .logo { width:56px; height:56px; border-radius:999px; border:1px solid var(--line); display:grid; place-items:center; background:var(--accent); font-weight:900; }
+      .brand span { display:block; color:var(--muted); font-size:12px; margin-top:3px; }
+      nav { display:grid; gap:6px; }
+      nav a { color:#334155; text-decoration:none; padding:10px 12px; border-radius:12px; font-size:14px; }
+      nav a:hover, nav a:first-child { background:#f1f5f9; color:#0f172a; }
+      header { height:64px; background:#fff; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; padding:0 24px; }
+      main { padding:24px; }
+      h1 { margin:0; font-size:28px; letter-spacing:-0.03em; }
+      .lead { color:var(--muted); margin:6px 0 24px; }
+      .grid { display:grid; gap:16px; }
+      .stats { grid-template-columns:repeat(4, minmax(0,1fr)); }
+      .cards { grid-template-columns:repeat(2, minmax(0,1fr)); margin-top:16px; }
+      .card { background:var(--card); border:1px solid var(--line); border-radius:18px; padding:20px; box-shadow:0 1px 2px #00000008; }
+      .stat-label { color:var(--muted); font-size:14px; }
+      .stat-value { margin-top:10px; font-size:28px; font-weight:800; }
+      .chips { display:flex; flex-wrap:wrap; gap:8px; margin-top:16px; }
+      .chip { border:1px solid var(--line); background:#f8fafc; border-radius:999px; padding:6px 10px; font-size:12px; font-weight:700; color:#334155; }
+      @media (max-width:900px) { .shell { grid-template-columns:1fr; } aside { display:none; } .stats,.cards { grid-template-columns:1fr; } header { height:auto; gap:12px; padding:16px; flex-direction:column; align-items:flex-start; } }
+      @media print { aside, header { display:none; } .shell { display:block; } body { background:#fff; } }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <aside>
+        <div class="brand"><div class="logo">AKY</div><div><strong>AKY Fuel Ops</strong><span>Owner/Admin console</span></div></div>
+        <nav><a href="#dashboard">Dashboard</a><a href="#stations">Stations</a><a href="#shifts">Shifts</a><a href="#reports">Shift Reports</a><a href="#imports">Imports</a><a href="#inventory">Inventory</a><a href="#audit">Audit Logs</a><a href="#settings">Settings</a></nav>
+      </aside>
+      <section>
+        <header><strong>Operations Console</strong><button onclick="print()">Print</button></header>
+        <main id="dashboard">
+          <h1>Dashboard</h1>
+          <p class="lead">Static fallback visible when GitHub Pages is still set to deploy from the repository root. Switch Pages source to GitHub Actions to serve the full Next.js build.</p>
+          <div class="grid stats"><div class="card"><div class="stat-label">Open shifts</div><div class="stat-value">0</div></div><div class="card"><div class="stat-label">Pending review</div><div class="stat-value">0</div></div><div class="card"><div class="stat-label">Discrepancy alerts</div><div class="stat-value">0</div></div><div class="card"><div class="stat-label">Inventory warnings</div><div class="stat-value">0</div></div></div>
+          <div class="grid cards"><div class="card"><h2>Shift reporting</h2><p>Open shift, encode meter readings, credit receipts, expenses, cash count, lubricant sales, and reconcile remittance.</p><div class="chips"><span class="chip">Meter readings</span><span class="chip">Credit receipts</span><span class="chip">Cash count</span></div></div><div class="card"><h2>Excel import</h2><p>Upload the OSR workbook, preview parsed records, validate calculations, then commit normalized records with audit logs.</p><div class="chips"><span class="chip">Preview before commit</span><span class="chip">Audit import</span></div></div></div>
+        </main>
+      </section>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,137 @@
+import { calculateShiftReport } from "@/lib/domain/calculations";
+import type { ShiftReportInput } from "@/lib/domain/types";
+import { createSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
+
+export interface DashboardSummary {
+  openShifts: number;
+  pendingReview: number;
+  discrepancyAlerts: number;
+  inventoryWarnings: number;
+}
+
+export interface ShiftReportRow {
+  id: string;
+  report_date: string;
+  duty_name: string;
+  shift_time_label: string;
+  status: string;
+  source: string;
+  discrepancy_amount: number;
+  calculated_totals: Record<string, unknown>;
+  created_at: string;
+  fuel_stations?: { name: string } | null;
+}
+
+export interface StationRow {
+  id: string;
+  code: string;
+  name: string;
+  official_report_header: string | null;
+  is_active: boolean;
+}
+
+export interface AuditLogRow {
+  id: string;
+  actor_role: string | null;
+  action_type: string;
+  entity_type: string;
+  entity_id: string | null;
+  details: string | null;
+  explanation: string | null;
+  created_at: string;
+}
+
+export function canUseLiveData() {
+  return isSupabaseConfigured();
+}
+
+export async function getDashboardSummary(): Promise<DashboardSummary> {
+  if (!canUseLiveData()) {
+    return { openShifts: 0, pendingReview: 0, discrepancyAlerts: 0, inventoryWarnings: 0 };
+  }
+
+  const supabase = createSupabaseBrowserClient();
+  const [{ count: draftCount }, { count: reviewCount }, { count: discrepancyCount }, { count: inventoryCount }] = await Promise.all([
+    supabase.from("fuel_shift_reports").select("id", { count: "exact", head: true }).eq("status", "draft"),
+    supabase.from("fuel_shift_reports").select("id", { count: "exact", head: true }).in("status", ["submitted", "reviewed"]),
+    supabase.from("fuel_shift_reports").select("id", { count: "exact", head: true }).neq("discrepancy_amount", 0),
+    supabase.from("fuel_station_lubricant_inventory").select("id", { count: "exact", head: true }).lte("quantity_on_hand", 0)
+  ]);
+
+  return {
+    openShifts: draftCount ?? 0,
+    pendingReview: reviewCount ?? 0,
+    discrepancyAlerts: discrepancyCount ?? 0,
+    inventoryWarnings: inventoryCount ?? 0
+  };
+}
+
+export async function listStations() {
+  if (!canUseLiveData()) return [] as StationRow[];
+  const supabase = createSupabaseBrowserClient();
+  const { data, error } = await supabase
+    .from("fuel_stations")
+    .select("id, code, name, official_report_header, is_active")
+    .order("name");
+  if (error) throw error;
+  return (data ?? []) as StationRow[];
+}
+
+export async function listShiftReports(limit = 25) {
+  if (!canUseLiveData()) return [] as ShiftReportRow[];
+  const supabase = createSupabaseBrowserClient();
+  const { data, error } = await supabase
+    .from("fuel_shift_reports")
+    .select("id, report_date, duty_name, shift_time_label, status, source, discrepancy_amount, calculated_totals, created_at, fuel_stations(name)")
+    .order("report_date", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? []) as ShiftReportRow[];
+}
+
+export async function listAuditLogs(limit = 50) {
+  if (!canUseLiveData()) return [] as AuditLogRow[];
+  const supabase = createSupabaseBrowserClient();
+  const { data, error } = await supabase
+    .from("audit_logs")
+    .select("id, actor_role, action_type, entity_type, entity_id, details, explanation, created_at")
+    .like("entity_type", "fuel_%")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? []) as AuditLogRow[];
+}
+
+export async function commitShiftReport(report: ShiftReportInput, importContext?: Record<string, unknown>) {
+  if (!canUseLiveData()) {
+    throw new Error("Supabase is not configured. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.");
+  }
+  const parsed = { ...report, calculatedPreview: calculateShiftReport(report) };
+  const supabase = createSupabaseBrowserClient();
+  const { data, error } = await supabase.rpc("fuel_commit_shift_report", {
+    payload: parsed,
+    import_context: importContext ?? null
+  });
+  if (error) throw error;
+  return data as string;
+}
+
+export async function markReportStatus(reportId: string, status: "submitted" | "reviewed" | "approved", explanation?: string) {
+  const supabase = createSupabaseBrowserClient();
+  const patch: Record<string, unknown> = { status, edit_reason: explanation || `${status} from web app` };
+  if (status === "submitted") patch.submitted_at = new Date().toISOString();
+  if (status === "reviewed") patch.reviewed_at = new Date().toISOString();
+  if (status === "approved") patch.approved_at = new Date().toISOString();
+  const { error } = await supabase.from("fuel_shift_reports").update(patch).eq("id", reportId);
+  if (error) throw error;
+}
+
+export async function recordExport(reportId: string | null, reportType: string, exportFormat: string) {
+  if (!canUseLiveData()) return;
+  const supabase = createSupabaseBrowserClient();
+  await supabase.from("fuel_report_exports").insert({
+    shift_report_id: reportId,
+    report_type: reportType,
+    export_format: exportFormat
+  });
+}
