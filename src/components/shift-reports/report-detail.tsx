@@ -12,6 +12,33 @@ function formatNumber(value: number | string | null | undefined, digits = 2) {
   return numeric.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }
 
+function formatMeterReading(value: number | string | null | undefined) {
+  const numeric = Number(value ?? Number.NaN);
+  if (!Number.isFinite(numeric)) return "-";
+  return numeric.toLocaleString("en-US", {
+    minimumFractionDigits: 3,
+    maximumFractionDigits: 3,
+    useGrouping: false
+  });
+}
+
+function formatLiters(value: number | string | null | undefined) {
+  const numeric = Number(value ?? Number.NaN);
+  if (!Number.isFinite(numeric)) return "-";
+  const useGrouping = Math.abs(numeric) >= 1_000_000;
+  return numeric.toLocaleString("en-US", {
+    minimumFractionDigits: 3,
+    maximumFractionDigits: 3,
+    useGrouping
+  });
+}
+
+function formatMoney(value: number | string | null | undefined) {
+  const numeric = Number(value ?? Number.NaN);
+  if (!Number.isFinite(numeric)) return "-";
+  return formatCurrency(numeric);
+}
+
 function formatDateTime(value: string | null | undefined) {
   if (!value) return "-";
 
@@ -46,8 +73,8 @@ function formatValue(value: unknown, kind: "currency" | "number" | "liters" = "n
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return "-";
 
-  if (kind === "currency") return formatCurrency(numeric);
-  if (kind === "liters") return formatNumber(numeric, 3);
+  if (kind === "currency") return formatMoney(numeric);
+  if (kind === "liters") return formatLiters(numeric);
   return formatNumber(numeric, 2);
 }
 
@@ -325,10 +352,10 @@ export function ReportDetail() {
                 <tr className="border-t border-slate-100" key={row.id}>
                   <td className="py-1.5">{row.pump_label_snapshot}</td>
                   <td className="py-1.5">{row.product_code_snapshot}</td>
-                  <td className="py-1.5 text-right tabular-nums">{formatNumber(row.before_reading, 3)}</td>
-                  <td className="py-1.5 text-right tabular-nums">{formatNumber(row.after_reading, 3)}</td>
-                  <td className="py-1.5 text-right tabular-nums">{formatNumber(row.liters_sold, 3)}</td>
-                  <td className="py-1.5 text-right tabular-nums">{formatNumber(row.calibration_liters, 3)}</td>
+                  <td className="py-1.5 text-right tabular-nums">{formatMeterReading(row.before_reading)}</td>
+                  <td className="py-1.5 text-right tabular-nums">{formatMeterReading(row.after_reading)}</td>
+                  <td className="py-1.5 text-right tabular-nums">{formatLiters(row.liters_sold)}</td>
+                  <td className="py-1.5 text-right tabular-nums">{formatLiters(row.calibration_liters)}</td>
                 </tr>
               ))}
             </DataTable>
@@ -351,8 +378,8 @@ export function ReportDetail() {
                   <td className="py-1.5">{row.company_name}</td>
                   <td className="py-1.5">{row.receipt_number || "-"}</td>
                   <td className="py-1.5">{row.product_code_snapshot}</td>
-                  <td className="py-1.5 text-right tabular-nums">{formatNumber(row.liters, 3)}</td>
-                  <td className="py-1.5 text-right tabular-nums">{formatCurrency(Number(row.amount ?? 0))}</td>
+                  <td className="py-1.5 text-right tabular-nums">{formatLiters(row.liters)}</td>
+                  <td className="py-1.5 text-right tabular-nums">{formatMoney(row.amount)}</td>
                 </tr>
               ))}
             </DataTable>
