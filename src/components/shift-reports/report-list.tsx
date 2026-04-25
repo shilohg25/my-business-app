@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { canUseLiveData, listShiftReports, markReportStatus, type ShiftReportRow } from "@/lib/data/client";
-import { getSupabaseConfigurationState } from "@/lib/supabase/client";
+import { appPath, getSupabaseConfigurationState } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/utils";
 
 export function ReportList() {
@@ -106,9 +106,17 @@ export function ReportList() {
                     </td>
                     <td className="text-right">{formatCurrency(Number(report.discrepancy_amount ?? 0))}</td>
                     <td className="text-right">
-                      <Button variant="outline" onClick={() => approve(report.id)} disabled={isApproved || isBusy}>
-                        {isBusy ? "Approving..." : isApproved ? "Approved" : "Approve"}
-                      </Button>
+                      <div className="flex justify-end gap-2">
+                        <a
+                          href={appPath(`/shift-reports/view/?id=${report.id}`)}
+                          className="inline-flex h-10 items-center justify-center rounded-xl border px-4 text-sm font-medium hover:bg-slate-50"
+                        >
+                          View
+                        </a>
+                        <Button variant="outline" onClick={() => approve(report.id)} disabled={isApproved || isBusy}>
+                          {isBusy ? "Approving..." : isApproved ? "Approved" : "Approve"}
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 );
