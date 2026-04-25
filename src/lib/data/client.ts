@@ -114,7 +114,7 @@ export async function listShiftReports(limit = 25) {
 
   if (error) throw error;
 
-  return (data ?? []) as ShiftReportRow[];
+  return (data ?? []) as unknown as ShiftReportRow[];
 }
 
 export async function listAuditLogs(limit = 50) {
