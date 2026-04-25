@@ -8,6 +8,7 @@ import { appPath, getSupabaseConfigurationState } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/utils";
 import { formatSignedCurrency } from "@/lib/analytics/discrepancy";
 import { fetchLubricantControlData } from "@/lib/data/lubricants";
+import { fetchFuelInventoryData } from "@/lib/data/fuel-inventory";
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -30,6 +31,7 @@ export function DashboardClient() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<Awaited<ReturnType<typeof fetchExecutiveAnalytics>> | null>(null);
   const [lubricants, setLubricants] = useState<Awaited<ReturnType<typeof fetchLubricantControlData>> | null>(null);
+  const [fuelInventory, setFuelInventory] = useState<Awaited<ReturnType<typeof fetchFuelInventoryData>> | null>(null);
 
   useEffect(() => {
     if (!liveData) {
@@ -44,12 +46,14 @@ export function DashboardClient() {
 
     Promise.all([
       fetchExecutiveAnalytics({ startDate: startOfMonthIso(), endDate: todayIso() }),
-      fetchLubricantControlData({ startDate: startOfMonthIso(), endDate: todayIso() })
+      fetchLubricantControlData({ startDate: startOfMonthIso(), endDate: todayIso() }),
+      fetchFuelInventoryData()
     ])
-      .then(([analyticsData, lubricantData]) => {
+      .then(([analyticsData, lubricantData, fuelData]) => {
         if (!active) return;
         setResult(analyticsData);
         setLubricants(lubricantData);
+        setFuelInventory(fuelData);
       })
       .catch((nextError: Error) => {
         if (!active) return;
@@ -103,6 +107,10 @@ export function DashboardClient() {
         <Card><CardHeader><CardDescription>Special gross liters out</CardDescription><CardTitle>{formatLiters(liters.SPECIAL?.grossLitersOut ?? 0)}</CardTitle></CardHeader></Card>
         <Card><CardHeader><CardDescription>Unleaded gross liters out</CardDescription><CardTitle>{formatLiters(liters.UNLEADED?.grossLitersOut ?? 0)}</CardTitle></CardHeader></Card>
         <Card><CardHeader><CardDescription>Reports needing review</CardDescription><CardTitle>{totals?.pendingReviewCount ?? 0}</CardTitle></CardHeader></Card>
+        <Card><CardHeader><CardDescription>Fuel deliveries this month</CardDescription><CardTitle>{fuelInventory?.summary.deliveriesThisMonth ?? 0}</CardTitle></CardHeader></Card>
+        <Card><CardHeader><CardDescription>Diesel variance liters</CardDescription><CardTitle>{formatLiters(fuelInventory?.summary.dieselVariance ?? 0)}</CardTitle></CardHeader></Card>
+        <Card><CardHeader><CardDescription>Special variance liters</CardDescription><CardTitle>{formatLiters(fuelInventory?.summary.specialVariance ?? 0)}</CardTitle></CardHeader></Card>
+        <Card><CardHeader><CardDescription>Unleaded variance liters</CardDescription><CardTitle>{formatLiters(fuelInventory?.summary.unleadedVariance ?? 0)}</CardTitle></CardHeader></Card>
       </div>
 
       {loading ? <p className="text-sm text-slate-500">Loading executive snapshot...</p> : null}
