@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
-import { canUseLiveData, fetchShiftReportDetail, type ShiftReportDetail } from "@/lib/data/client";
+import { canUseLiveData, fetchShiftReportDetail, markReportStatus, type ShiftReportDetail } from "@/lib/data/client";
 import { appPath, getSupabaseConfigurationState } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/utils";
 
@@ -191,6 +191,109 @@ function ReviewHeader({ detail, id }: { detail: ShiftReportDetail; id: string })
   );
 }
 
+type ReviewActionCardProps = {
+  report: ShiftReportDetail["report"];
+  onActionSuccess: () => Promise<void>;
+  onActionError: (message: string) => void;
+};
+
+function ReviewActionCard({ report, onActionSuccess, onActionError }: ReviewActionCardProps) {
+  const [reason, setReason] = useState("");
+  const [savingAction, setSavingAction] = useState<"reviewed" | "approved" | "correction" | null>(null);
+  const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
+
+  async function runAction(
+    action: "reviewed" | "approved" | "correction",
+    status: "reviewed" | "approved",
+    explanation: string,
+    successMessage: string
+  ) {
+    setSavingAction(action);
+    setFeedback(null);
+    onActionError("");
+
+    try {
+      await markReportStatus(report.id, status, explanation);
+      await onActionSuccess();
+      setFeedback({ type: "success", message: successMessage });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to update report status.";
+      setFeedback({ type: "error", message });
+      onActionError(message);
+    } finally {
+      setSavingAction(null);
+    }
+  }
+
+  const isApproved = report.status === "approved";
+  const isSaving = savingAction !== null;
+  const trimmedReason = reason.trim();
+  const correctionExplanation = `Needs correction: ${trimmedReason}`;
+
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-4">
+      <div className="mb-3">
+        <h2 className="text-base font-semibold text-slate-900">Review actions</h2>
+        <p className="mt-1 text-xs text-slate-500">
+          Use Mark Reviewed after checking entries. Use Approve only when the report is final. Use Flag for Correction when the
+          report needs edits or re-import.
+        </p>
+      </div>
+
+      <div className="grid gap-3">
+        <p className="text-sm text-slate-700">
+          <span className="text-slate-500">Current status:</span>{" "}
+          <span className="font-semibold uppercase tracking-wide">{report.status || "unknown"}</span>
+        </p>
+
+        <label className="grid gap-1 text-xs font-medium text-slate-700" htmlFor="review-reason">
+          Edit/review reason
+          <textarea
+            id="review-reason"
+            className="min-h-24 rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal text-slate-800 outline-none ring-slate-300 placeholder:text-slate-400 focus:ring-2"
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            placeholder="Add context for the status update."
+          />
+        </label>
+
+        {feedback ? (
+          <p className={`text-xs ${feedback.type === "success" ? "text-emerald-700" : "text-red-700"}`}>{feedback.message}</p>
+        ) : null}
+
+        <div className="flex flex-wrap gap-2">
+          <button
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={isSaving}
+            onClick={() => runAction("reviewed", "reviewed", trimmedReason || "Marked reviewed from report detail", "Report marked as reviewed.")}
+            type="button"
+          >
+            {savingAction === "reviewed" ? "Saving..." : "Mark Reviewed"}
+          </button>
+          <button
+            className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-800 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={isSaving || isApproved}
+            onClick={() => runAction("approved", "approved", trimmedReason || "Approved from report detail", "Report approved successfully.")}
+            type="button"
+          >
+            {savingAction === "approved" ? "Saving..." : isApproved ? "Approved" : "Approve"}
+          </button>
+          <button
+            className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={isSaving || trimmedReason.length === 0}
+            onClick={() =>
+              runAction("correction", "reviewed", correctionExplanation, "Report flagged for correction and marked as reviewed.")
+            }
+            type="button"
+          >
+            {savingAction === "correction" ? "Saving..." : "Flag for Correction"}
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export function ReportDetail() {
   const searchParams = useSearchParams();
   const id = useMemo(() => searchParams.get("id")?.trim() ?? "", [searchParams]);
@@ -202,7 +305,7 @@ export function ReportDetail() {
   const [loading, setLoading] = useState(liveData && id.length > 0);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const refreshDetail = useCallback(async (options?: { preserveDetailOnError?: boolean }) => {
     if (!id) {
       setLoading(false);
       setDetail(null);
@@ -217,28 +320,25 @@ export function ReportDetail() {
       return;
     }
 
-    let active = true;
     setLoading(true);
     setError(null);
 
-    fetchShiftReportDetail(id)
-      .then((result) => {
-        if (!active) return;
-        setDetail(result);
-      })
-      .catch((nextError: Error) => {
-        if (!active) return;
+    try {
+      const result = await fetchShiftReportDetail(id);
+      setDetail(result);
+    } catch (nextError) {
+      if (!options?.preserveDetailOnError) {
         setDetail(null);
-        setError(nextError.message || "Unable to load report details.");
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-
-    return () => {
-      active = false;
-    };
+      }
+      setError(nextError instanceof Error ? nextError.message : "Unable to load report details.");
+    } finally {
+      setLoading(false);
+    }
   }, [config.reason, id, liveData]);
+
+  useEffect(() => {
+    void refreshDetail();
+  }, [refreshDetail]);
 
   const totals = detail?.report.calculated_totals ?? {};
   const summaryTotalKeys = new Set([
@@ -294,6 +394,11 @@ export function ReportDetail() {
       {!loading && !error && detail ? (
         <>
           <ReviewHeader detail={detail} id={id} />
+          <ReviewActionCard
+            report={detail.report}
+            onActionError={(message) => setError(message || null)}
+            onActionSuccess={() => refreshDetail({ preserveDetailOnError: true })}
+          />
 
           <SectionCard title="Approval Summary" description="Key totals for quick manager review.">
             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
