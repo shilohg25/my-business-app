@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -37,8 +36,8 @@ export default function LoginPage() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="mx-auto mb-3 h-20 w-20 overflow-hidden rounded-full border bg-white p-1">
-            <Image src="/logo.png" alt="AKY logo" width={80} height={80} className="object-contain" />
-          </div>
+  <img src={appPath("/logo.png")} alt="AKY logo" className="h-full w-full object-contain" />
+</div>
           <CardTitle>Sign in</CardTitle>
           <CardDescription>Use your existing Supabase account from the shared database.</CardDescription>
         </CardHeader>
