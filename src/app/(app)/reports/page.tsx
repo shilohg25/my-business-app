@@ -38,18 +38,20 @@ export default function ReportsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Management Reports</h1>
-        <p className="text-sm text-slate-500">Summaries and exports for owners and managers.</p>
+        <p className="text-sm text-slate-500">
+          Owner and manager summaries for sales, remittance, credits, expenses, and discrepancies.
+        </p>
       </div>
 
       <Card>
         <CardContent className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-slate-600">
-            Detailed raw shift paperwork is reviewed in Daily Shift Reports. This module is reserved for business
-            summaries, trend reporting, and export workflows.
+            Detailed shift paperwork lives under Daily Shift Reports. This page will be for summarized business
+            reporting and exports.
           </p>
           <a
             href={appPath("/shift-reports/")}
-            className="inline-flex items-center rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            className="inline-flex items-center rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800"
           >
             Open Daily Shift Reports
           </a>
