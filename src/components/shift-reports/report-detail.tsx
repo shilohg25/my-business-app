@@ -25,11 +25,10 @@ function formatMeterReading(value: number | string | null | undefined) {
 function formatLiters(value: number | string | null | undefined) {
   const numeric = Number(value ?? Number.NaN);
   if (!Number.isFinite(numeric)) return "-";
-  const useGrouping = Math.abs(numeric) >= 1_000_000;
   return numeric.toLocaleString("en-US", {
     minimumFractionDigits: 3,
     maximumFractionDigits: 3,
-    useGrouping
+    useGrouping: false
   });
 }
 
@@ -265,7 +264,7 @@ function ReviewActionCard({ report, onActionSuccess, onActionError }: ReviewActi
           <button
             className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
             disabled={isSaving}
-            onClick={() => runAction("reviewed", "reviewed", trimmedReason || "Marked reviewed from report detail", "Report marked as reviewed.")}
+            onClick={() => runAction("reviewed", "reviewed", trimmedReason || "Reviewed from report detail", "Report marked as reviewed.")}
             type="button"
           >
             {savingAction === "reviewed" ? "Saving..." : "Mark Reviewed"}
