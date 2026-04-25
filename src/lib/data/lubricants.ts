@@ -61,14 +61,13 @@ export async function fetchLubricantControlData(options: { startDate: string; en
 
   const supabase = createSupabaseBrowserClient();
 
-  const [productsResult, salesResult, movementResult, stationInventoryResult, warehouseInventoryResult, stationsResult] = await Promise.all([
+  const [productsResult, reportsInRangeResult, movementResult, stationInventoryResult, warehouseInventoryResult, stationsResult] = await Promise.all([
     supabase.from("fuel_lubricant_products").select("id, sku, name, unit, default_unit_price, is_active").order("name", { ascending: true }),
     supabase
-      .from("fuel_lubricant_sales")
-      .select("id, shift_report_id, lubricant_product_id, product_name_snapshot, quantity, unit_price, amount, created_at")
-      .gte("created_at", `${options.startDate}T00:00:00Z`)
-      .lte("created_at", `${options.endDate}T23:59:59Z`)
-      .order("created_at", { ascending: false }),
+      .from("fuel_shift_reports")
+      .select("id, report_date, duty_name, station_id")
+      .gte("report_date", options.startDate)
+      .lte("report_date", options.endDate),
     supabase
       .from("fuel_lubricant_stock_movements")
       .select("id, lubricant_product_id, movement_type, quantity, from_station_id, to_station_id, shift_report_id, reference, notes, created_at")
@@ -79,9 +78,23 @@ export async function fetchLubricantControlData(options: { startDate: string; en
     supabase.from("fuel_stations").select("id, name").order("name", { ascending: true })
   ]);
 
-  const primaryErrors = [productsResult.error, salesResult.error, movementResult.error, stationInventoryResult.error, warehouseInventoryResult.error, stationsResult.error].filter(Boolean);
+  const primaryErrors = [productsResult.error, reportsInRangeResult.error, movementResult.error, stationInventoryResult.error, warehouseInventoryResult.error, stationsResult.error].filter(Boolean);
   if (primaryErrors.length > 0) {
     throw new Error(`Unable to load lubricant control data. ${primaryErrors[0]?.message ?? "Please retry or contact support."}`);
+  }
+
+  const reportsInRange = (reportsInRangeResult.data ?? []) as Array<{ id: string; report_date: string | null; duty_name: string | null; station_id: string | null }>;
+  const reportIds = reportsInRange.map((row) => row.id);
+  const salesResult = reportIds.length
+    ? await supabase
+        .from("fuel_lubricant_sales")
+        .select("id, shift_report_id, lubricant_product_id, product_name_snapshot, quantity, unit_price, amount, created_at")
+        .in("shift_report_id", reportIds)
+        .order("created_at", { ascending: false })
+    : { data: [], error: null };
+
+  if (salesResult.error) {
+    throw new Error(`Unable to load lubricant sales. ${salesResult.error.message}`);
   }
 
   const products = (productsResult.data ?? []) as LubricantProduct[];
@@ -91,19 +104,8 @@ export async function fetchLubricantControlData(options: { startDate: string; en
   const warehouseInventory = (warehouseInventoryResult.data ?? []) as Array<LubricantInventoryRow & { updated_at: string | null }>;
   const stations = (stationsResult.data ?? []) as Array<{ id: string; name: string }>;
 
-  const reportIds = Array.from(new Set(sales.map((row) => row.shift_report_id).filter(Boolean)));
-  const [reportsResult] = await Promise.all([
-    reportIds.length
-      ? supabase.from("fuel_shift_reports").select("id, report_date, duty_name, station_id").in("id", reportIds)
-      : Promise.resolve({ data: [], error: null })
-  ]);
-
-  if (reportsResult.error) {
-    throw new Error(`Unable to load report data. ${reportsResult.error.message}`);
-  }
-
   const productsById = new Map(products.map((item) => [item.id, item]));
-  const reportsById = new Map(((reportsResult.data ?? []) as Array<{ id: string; report_date: string | null; duty_name: string | null; station_id: string | null }>).map((item) => [item.id, item]));
+  const reportsById = new Map(reportsInRange.map((item) => [item.id, item]));
   const stationsById = new Map(stations.map((item) => [item.id, item]));
 
   const salesWithReport = sales.map((sale) => {

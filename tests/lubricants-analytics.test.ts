@@ -35,6 +35,19 @@ describe("lubricants analytics", () => {
     expect(analytics.movementByType).toEqual({ sale: 1, transfer_out: 1 });
   });
 
+  it("returns bodega and station inventory summaries independently", () => {
+    const analytics = buildLubricantsAnalytics({
+      products: [{ id: "p1", name: "AX7", sku: "AX7", unit: "bottle", default_unit_price: 100, is_active: true }],
+      sales: [],
+      movements: [],
+      warehouseInventory: [{ id: "w1", lubricant_product_id: "p1", quantity_on_hand: 10, reorder_level: 2 }],
+      stationInventory: [{ id: "s1", lubricant_product_id: "p1", quantity_on_hand: 1, reorder_level: 2 }]
+    });
+
+    expect(analytics.warehouseLowStockCount).toBe(0);
+    expect(analytics.stationLowStockCount).toBe(1);
+  });
+
   it("adds unmatched sale warning when sale snapshot cannot match active product", () => {
     const analytics = buildLubricantsAnalytics({
       products: [{ id: "p1", name: "ACTIVE", sku: "A", unit: "bottle", default_unit_price: 100, is_active: true }],

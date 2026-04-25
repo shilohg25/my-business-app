@@ -6,6 +6,14 @@ function asNumber(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+export function normalizeFuelProductCode(code: string | null | undefined) {
+  const normalized = (code ?? "").trim().toUpperCase();
+  if (normalized === "ADO" || normalized === "DIESEL") return "DIESEL";
+  if (normalized === "SPU" || normalized === "SPECIAL") return "SPECIAL";
+  if (normalized === "ULG" || normalized === "UNLEADED") return "UNLEADED";
+  return "OTHER";
+}
+
 function monthStart() {
   const now = new Date();
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString().slice(0, 10);
@@ -55,6 +63,78 @@ export interface FuelInventoryResult {
     notes: string | null;
   }>;
   stations: Array<{ id: string; name: string }>;
+}
+
+export function buildFuelInventorySummary(input: {
+  deliveries: Array<{ station_id: string; station_name: string | null; product_code_snapshot: string; liters: number | string | null }>;
+  meterReports: Array<{ station_id: string; fuel_meter_readings: Array<{ product_code_snapshot: string; liters_sold: number | string | null }> | null }>;
+  readings: Array<{
+    station_id: string;
+    station_name: string | null;
+    product_code_snapshot: string;
+    actual_ending_liters: number | string | null;
+    expected_ending_liters: number | string | null;
+    variance_liters: number | string | null;
+  }>;
+}) {
+  const aggregate = new Map<string, FuelInventoryResult["productInventory"][number]>();
+
+  input.deliveries.forEach((row) => {
+    const product = normalizeFuelProductCode(row.product_code_snapshot);
+    const key = `${row.station_id}::${product}`;
+    const existing = aggregate.get(key) ?? {
+      station_id: row.station_id,
+      station_name: row.station_name,
+      product,
+      delivered_liters: 0,
+      gross_liters_out: 0,
+      latest_actual_ending: 0,
+      latest_expected_ending: 0,
+      variance_liters: 0
+    };
+    existing.delivered_liters += asNumber(row.liters);
+    aggregate.set(key, existing);
+  });
+
+  input.meterReports.forEach((report) => {
+    (report.fuel_meter_readings ?? []).forEach((reading) => {
+      const product = normalizeFuelProductCode(reading.product_code_snapshot);
+      const key = `${report.station_id}::${product}`;
+      const existing = aggregate.get(key) ?? {
+        station_id: report.station_id,
+        station_name: null,
+        product,
+        delivered_liters: 0,
+        gross_liters_out: 0,
+        latest_actual_ending: 0,
+        latest_expected_ending: 0,
+        variance_liters: 0
+      };
+      existing.gross_liters_out += asNumber(reading.liters_sold);
+      aggregate.set(key, existing);
+    });
+  });
+
+  input.readings.forEach((row) => {
+    const product = normalizeFuelProductCode(row.product_code_snapshot);
+    const key = `${row.station_id}::${product}`;
+    const existing = aggregate.get(key) ?? {
+      station_id: row.station_id,
+      station_name: row.station_name,
+      product,
+      delivered_liters: 0,
+      gross_liters_out: 0,
+      latest_actual_ending: 0,
+      latest_expected_ending: 0,
+      variance_liters: 0
+    };
+    existing.latest_actual_ending = asNumber(row.actual_ending_liters);
+    existing.latest_expected_ending = asNumber(row.expected_ending_liters);
+    existing.variance_liters = asNumber(row.variance_liters);
+    aggregate.set(key, existing);
+  });
+
+  return Array.from(aggregate.values());
 }
 
 export async function fetchFuelInventoryData(): Promise<FuelInventoryResult> {
@@ -116,61 +196,14 @@ export async function fetchFuelInventoryData(): Promise<FuelInventoryResult> {
     station_name: stationById.get(row.station_id) ?? null
   }));
 
-  const aggregate = new Map<string, FuelInventoryResult["productInventory"][number]>();
-
-  deliveries.forEach((row) => {
-    const key = `${row.station_id}::${row.product_code_snapshot}`;
-    const existing = aggregate.get(key) ?? {
-      station_id: row.station_id,
-      station_name: row.station_name,
-      product: row.product_code_snapshot,
-      delivered_liters: 0,
-      gross_liters_out: 0,
-      latest_actual_ending: 0,
-      latest_expected_ending: 0,
-      variance_liters: 0
-    };
-    existing.delivered_liters += asNumber(row.liters);
-    aggregate.set(key, existing);
-  });
-
-  (meterResult.data ?? []).forEach((report: any) => {
-    (report.fuel_meter_readings ?? []).forEach((reading: any) => {
-      const key = `${report.station_id}::${reading.product_code_snapshot}`;
-      const existing = aggregate.get(key) ?? {
-        station_id: report.station_id,
-        station_name: stationById.get(report.station_id) ?? null,
-        product: reading.product_code_snapshot,
-        delivered_liters: 0,
-        gross_liters_out: 0,
-        latest_actual_ending: 0,
-        latest_expected_ending: 0,
-        variance_liters: 0
-      };
-      existing.gross_liters_out += asNumber(reading.liters_sold);
-      aggregate.set(key, existing);
-    });
-  });
-
-  readings.forEach((row) => {
-    const key = `${row.station_id}::${row.product_code_snapshot}`;
-    const existing = aggregate.get(key) ?? {
-      station_id: row.station_id,
-      station_name: row.station_name,
-      product: row.product_code_snapshot,
-      delivered_liters: 0,
-      gross_liters_out: 0,
-      latest_actual_ending: 0,
-      latest_expected_ending: 0,
-      variance_liters: 0
-    };
-    existing.latest_actual_ending = asNumber(row.actual_ending_liters);
-    existing.latest_expected_ending = asNumber(row.expected_ending_liters);
-    existing.variance_liters = asNumber(row.variance_liters);
-    aggregate.set(key, existing);
-  });
-
-  const productInventory = Array.from(aggregate.values());
+  const productInventory = buildFuelInventorySummary({
+    deliveries,
+    readings,
+    meterReports: (meterResult.data ?? []) as Array<{
+      station_id: string;
+      fuel_meter_readings: Array<{ product_code_snapshot: string; liters_sold: number | string | null }> | null;
+    }>
+  }).map((row) => ({ ...row, station_name: row.station_name ?? stationById.get(row.station_id) ?? null }));
   const sumVariance = (product: string) => productInventory.filter((row) => row.product === product).reduce((sum, row) => sum + row.variance_liters, 0);
 
   return {
