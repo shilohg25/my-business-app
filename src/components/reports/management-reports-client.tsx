@@ -2,38 +2,44 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { canUseLiveData, listShiftReports, type ShiftReportRow } from "@/lib/data/client";
-import { appPath, getSupabaseConfigurationState } from "@/lib/supabase/client";
+import { canUseLiveData } from "@/lib/data/client";
+import { fetchExecutiveAnalytics } from "@/lib/data/executive";
+import { getSupabaseConfigurationState } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/utils";
 
-type TotalsKey =
-  | "totalFuelCashSales"
-  | "totalLubricantSales"
-  | "totalCashCount"
-  | "operationalNetRemittance"
-  | "workbookStyleDiscrepancy";
-
-function getTotalAsNumber(totals: Record<string, unknown>, key: TotalsKey) {
-  const value = totals[key];
-  const numeric = Number(value ?? Number.NaN);
-  return Number.isFinite(numeric) ? numeric : null;
+function todayIso() {
+  return new Date().toISOString().slice(0, 10);
 }
 
-function sumTotal(reports: ShiftReportRow[], key: TotalsKey) {
-  return reports.reduce((sum, report) => sum + (getTotalAsNumber(report.calculated_totals ?? {}, key) ?? 0), 0);
+function startOfMonthIso() {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString().slice(0, 10);
+}
+
+function formatLiters(value: number) {
+  return value.toLocaleString("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3, useGrouping: false });
+}
+
+function formatDay(value: string) {
+  const parsed = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" });
 }
 
 export function ManagementReportsClient() {
   const liveData = canUseLiveData();
   const config = getSupabaseConfigurationState();
 
-  const [reports, setReports] = useState<ShiftReportRow[]>([]);
+  const [startDate, setStartDate] = useState(startOfMonthIso());
+  const [endDate, setEndDate] = useState(todayIso());
   const [loading, setLoading] = useState(liveData);
   const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<Awaited<ReturnType<typeof fetchExecutiveAnalytics>> | null>(null);
 
   useEffect(() => {
     if (!liveData) {
       setLoading(false);
+      setResult(null);
       return;
     }
 
@@ -41,10 +47,10 @@ export function ManagementReportsClient() {
     setLoading(true);
     setError(null);
 
-    listShiftReports(100)
-      .then((rows) => {
+    fetchExecutiveAnalytics({ startDate, endDate })
+      .then((data) => {
         if (!active) return;
-        setReports(rows);
+        setResult(data);
       })
       .catch((nextError: Error) => {
         if (!active) return;
@@ -57,85 +63,17 @@ export function ManagementReportsClient() {
     return () => {
       active = false;
     };
-  }, [liveData]);
+  }, [endDate, liveData, startDate]);
 
-  const summary = useMemo(() => {
-    const totalFuelCashSales = sumTotal(reports, "totalFuelCashSales");
-    const totalLubricantSales = sumTotal(reports, "totalLubricantSales");
-    const totalCashCount = sumTotal(reports, "totalCashCount");
-    const totalNetRemittance = sumTotal(reports, "operationalNetRemittance");
-    const totalDiscrepancy = reports.reduce((sum, report) => sum + Number(report.discrepancy_amount ?? 0), 0);
-    const approved = reports.filter((report) => report.status === "approved").length;
-    const needingReview = reports.filter((report) => report.status !== "approved").length;
-
-    return {
-      totalFuelCashSales,
-      totalLubricantSales,
-      totalCashCount,
-      totalNetRemittance,
-      totalDiscrepancy,
-      reportCount: reports.length,
-      approved,
-      needingReview
-    };
-  }, [reports]);
-
-  const dailyTotals = useMemo(() => {
-    const grouped = new Map<string, { count: number; fuelCashSales: number; cashCount: number; netRemittance: number; discrepancy: number }>();
-
-    reports.forEach((report) => {
-      const key = report.report_date || "-";
-      const entry = grouped.get(key) ?? { count: 0, fuelCashSales: 0, cashCount: 0, netRemittance: 0, discrepancy: 0 };
-
-      entry.count += 1;
-      entry.fuelCashSales += getTotalAsNumber(report.calculated_totals ?? {}, "totalFuelCashSales") ?? 0;
-      entry.cashCount += getTotalAsNumber(report.calculated_totals ?? {}, "totalCashCount") ?? 0;
-      entry.netRemittance += getTotalAsNumber(report.calculated_totals ?? {}, "operationalNetRemittance") ?? 0;
-      entry.discrepancy += Number(report.discrepancy_amount ?? 0);
-
-      grouped.set(key, entry);
+  const productRows = useMemo(() => {
+    const rows = Object.values(result?.analytics.productLiters ?? {});
+    return rows.sort((a, b) => {
+      const order = ["DIESEL", "SPECIAL", "UNLEADED", "OTHER"];
+      return order.indexOf(a.product) - order.indexOf(b.product);
     });
+  }, [result?.analytics.productLiters]);
 
-    return Array.from(grouped.entries())
-      .map(([date, totals]) => ({ date, ...totals }))
-      .sort((a, b) => (a.date < b.date ? 1 : -1));
-  }, [reports]);
-
-  const dutySummary = useMemo(() => {
-    const grouped = new Map<string, { count: number; netRemittance: number; discrepancy: number }>();
-
-    reports.forEach((report) => {
-      const key = report.duty_name || "-";
-      const entry = grouped.get(key) ?? { count: 0, netRemittance: 0, discrepancy: 0 };
-
-      entry.count += 1;
-      entry.netRemittance += getTotalAsNumber(report.calculated_totals ?? {}, "operationalNetRemittance") ?? 0;
-      entry.discrepancy += Number(report.discrepancy_amount ?? 0);
-
-      grouped.set(key, entry);
-    });
-
-    return Array.from(grouped.entries())
-      .map(([dutyName, totals]) => ({ dutyName, ...totals }))
-      .sort((a, b) => b.netRemittance - a.netRemittance);
-  }, [reports]);
-
-  const statusBreakdown = useMemo(() => {
-    const counts = {
-      draft: 0,
-      submitted: 0,
-      reviewed: 0,
-      approved: 0
-    };
-
-    reports.forEach((report) => {
-      if (report.status === "draft" || report.status === "submitted" || report.status === "reviewed" || report.status === "approved") {
-        counts[report.status] += 1;
-      }
-    });
-
-    return counts;
-  }, [reports]);
+  const totals = result?.analytics.totals;
 
   return (
     <div className="space-y-6">
@@ -147,87 +85,108 @@ export function ManagementReportsClient() {
 
       {error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div> : null}
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Card><CardHeader><CardDescription>Total fuel cash sales</CardDescription><CardTitle>{formatCurrency(summary.totalFuelCashSales)}</CardTitle></CardHeader></Card>
-        <Card><CardHeader><CardDescription>Total lubricant sales</CardDescription><CardTitle>{formatCurrency(summary.totalLubricantSales)}</CardTitle></CardHeader></Card>
-        <Card><CardHeader><CardDescription>Total cash count</CardDescription><CardTitle>{formatCurrency(summary.totalCashCount)}</CardTitle></CardHeader></Card>
-        <Card><CardHeader><CardDescription>Total net remittance</CardDescription><CardTitle>{formatCurrency(summary.totalNetRemittance)}</CardTitle></CardHeader></Card>
-        <Card><CardHeader><CardDescription>Total discrepancy</CardDescription><CardTitle>{formatCurrency(summary.totalDiscrepancy)}</CardTitle></CardHeader></Card>
-        <Card><CardHeader><CardDescription>Number of reports</CardDescription><CardTitle>{summary.reportCount}</CardTitle></CardHeader></Card>
-        <Card><CardHeader><CardDescription>Number approved</CardDescription><CardTitle>{summary.approved}</CardTitle></CardHeader></Card>
-        <Card><CardHeader><CardDescription>Number needing review</CardDescription><CardTitle>{summary.needingReview}</CardTitle></CardHeader></Card>
-      </div>
-
       <Card>
         <CardHeader>
-          <CardTitle>Daily totals</CardTitle>
-          <CardDescription>Grouped by report date from recent shift reports (up to 100 rows).</CardDescription>
+          <CardTitle>Date range</CardTitle>
+          <CardDescription>Default is this month using report date business periods.</CardDescription>
         </CardHeader>
-        <CardContent>
-          {loading ? <p className="text-sm text-slate-500">Loading daily totals...</p> : null}
-          {!loading && dailyTotals.length === 0 ? <p className="text-sm text-slate-500">No reports available for aggregation.</p> : null}
-          {!loading && dailyTotals.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="text-left text-slate-500">
-                  <tr>
-                    <th className="py-2">Date</th><th className="text-right">Reports</th><th className="text-right">Fuel cash sales</th><th className="text-right">Cash count</th><th className="text-right">Net remittance</th><th className="text-right">Discrepancy</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {dailyTotals.map((row) => (
-                    <tr className="border-t" key={row.date}>
-                      <td className="py-2">{row.date}</td><td className="text-right">{row.count}</td><td className="text-right">{formatCurrency(row.fuelCashSales)}</td><td className="text-right">{formatCurrency(row.cashCount)}</td><td className="text-right">{formatCurrency(row.netRemittance)}</td><td className="text-right">{formatCurrency(row.discrepancy)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : null}
+        <CardContent className="grid gap-3 sm:grid-cols-2">
+          <label className="text-xs font-medium text-slate-600">Start date
+            <input className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
+          </label>
+          <label className="text-xs font-medium text-slate-600">End date
+            <input className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
+          </label>
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 xl:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Cashier/Duty summary</CardTitle>
-            <CardDescription>Net remittance and discrepancy grouped by duty/cashier.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {!loading && dutySummary.length === 0 ? <p className="text-sm text-slate-500">No duty records available.</p> : null}
-            {dutySummary.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="text-left text-slate-500">
-                    <tr><th className="py-2">Duty/Cashier</th><th className="text-right">Reports</th><th className="text-right">Net remittance</th><th className="text-right">Discrepancy</th></tr>
-                  </thead>
-                  <tbody>
-                    {dutySummary.map((row) => (
-                      <tr className="border-t" key={row.dutyName}>
-                        <td className="py-2">{row.dutyName}</td><td className="text-right">{row.count}</td><td className="text-right">{formatCurrency(row.netRemittance)}</td><td className="text-right">{formatCurrency(row.discrepancy)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : null}
-          </CardContent>
-        </Card>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <Card><CardHeader><CardDescription>Total fuel cash sales</CardDescription><CardTitle>{formatCurrency(totals?.totalFuelCashSales ?? 0)}</CardTitle></CardHeader></Card>
+        <Card><CardHeader><CardDescription>Total lubricant sales</CardDescription><CardTitle>{formatCurrency(totals?.totalLubricantSales ?? 0)}</CardTitle></CardHeader></Card>
+        <Card><CardHeader><CardDescription>Total expenses</CardDescription><CardTitle>{formatCurrency(totals?.totalExpenses ?? 0)}</CardTitle></CardHeader></Card>
+        <Card><CardHeader><CardDescription>Total cash count</CardDescription><CardTitle>{formatCurrency(totals?.totalCashCount ?? 0)}</CardTitle></CardHeader></Card>
+        <Card><CardHeader><CardDescription>Total net remittance</CardDescription><CardTitle>{formatCurrency(totals?.totalNetRemittance ?? 0)}</CardTitle></CardHeader></Card>
+        <Card><CardHeader><CardDescription>Total discrepancy</CardDescription><CardTitle>{formatCurrency(totals?.totalDiscrepancy ?? 0)}</CardTitle></CardHeader></Card>
+        <Card><CardHeader><CardDescription>Report count</CardDescription><CardTitle>{totals?.reportCount ?? 0}</CardTitle></CardHeader></Card>
+        <Card><CardHeader><CardDescription>Approved reports</CardDescription><CardTitle>{totals?.approvedCount ?? 0}</CardTitle></CardHeader></Card>
+        <Card><CardHeader><CardDescription>Reports needing review</CardDescription><CardTitle>{totals?.pendingReviewCount ?? 0}</CardTitle></CardHeader></Card>
+      </div>
 
+      <Card>
+        <CardHeader><CardTitle>Product liters</CardTitle><CardDescription>Gross, credit, calibration, and net cash liters by product group.</CardDescription></CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-slate-500"><tr><th className="py-2">Product</th><th className="text-right">Gross liters out</th><th className="text-right">Credit liters</th><th className="text-right">Calibration liters</th><th className="text-right">Net cash liters</th></tr></thead>
+              <tbody>
+                {productRows.map((row) => (
+                  <tr className="border-t" key={row.product}><td className="py-2">{row.product}</td><td className="text-right">{formatLiters(row.grossLitersOut)}</td><td className="text-right">{formatLiters(row.creditLiters)}</td><td className="text-right">{formatLiters(row.calibrationLiters)}</td><td className="text-right">{formatLiters(row.netCashLiters)}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-4 xl:grid-cols-3">
         <Card>
-          <CardHeader>
-            <CardTitle>Status breakdown</CardTitle>
-            <CardDescription>Current report workflow distribution.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <div className="flex items-center justify-between rounded-lg border p-2"><span>Draft</span><strong>{statusBreakdown.draft}</strong></div>
-            <div className="flex items-center justify-between rounded-lg border p-2"><span>Submitted</span><strong>{statusBreakdown.submitted}</strong></div>
-            <div className="flex items-center justify-between rounded-lg border p-2"><span>Reviewed</span><strong>{statusBreakdown.reviewed}</strong></div>
-            <div className="flex items-center justify-between rounded-lg border p-2"><span>Approved</span><strong>{statusBreakdown.approved}</strong></div>
-            <a className="mt-2 inline-flex text-xs font-medium text-slate-700 underline" href={appPath("/shift-reports/")}>Open Daily Shift Reports for action</a>
-          </CardContent>
+          <CardHeader><CardTitle>Daily expense totals</CardTitle></CardHeader>
+          <CardContent><div className="overflow-x-auto"><table className="w-full text-sm"><thead className="text-left text-slate-500"><tr><th className="py-2">Date</th><th className="text-right">Count</th><th className="text-right">Amount</th></tr></thead><tbody>{(result?.analytics.dailyExpenses ?? []).map((row) => (<tr className="border-t" key={row.date}><td className="py-2">{formatDay(row.date)}</td><td className="text-right">{row.count}</td><td className="text-right">{formatCurrency(row.amount)}</td></tr>))}</tbody></table></div></CardContent>
+        </Card>
+        <Card>
+          <CardHeader><CardTitle>Monthly expense totals</CardTitle></CardHeader>
+          <CardContent><div className="overflow-x-auto"><table className="w-full text-sm"><thead className="text-left text-slate-500"><tr><th className="py-2">Month</th><th className="text-right">Count</th><th className="text-right">Amount</th></tr></thead><tbody>{(result?.analytics.monthlyExpenses ?? []).map((row) => (<tr className="border-t" key={row.month}><td className="py-2">{row.month}</td><td className="text-right">{row.count}</td><td className="text-right">{formatCurrency(row.amount)}</td></tr>))}</tbody></table></div></CardContent>
+        </Card>
+        <Card>
+          <CardHeader><CardTitle>Expenses by category</CardTitle></CardHeader>
+          <CardContent><div className="overflow-x-auto"><table className="w-full text-sm"><thead className="text-left text-slate-500"><tr><th className="py-2">Category</th><th className="text-right">Count</th><th className="text-right">Amount</th></tr></thead><tbody>{(result?.analytics.expensesByCategory ?? []).map((row) => (<tr className="border-t" key={row.category}><td className="py-2">{row.category}</td><td className="text-right">{row.count}</td><td className="text-right">{formatCurrency(row.amount)}</td></tr>))}</tbody></table></div></CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader><CardTitle>Daily operating summary</CardTitle></CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-slate-500"><tr><th className="py-2">Date</th><th className="text-right">Reports</th><th className="text-right">Fuel cash sales</th><th className="text-right">Expenses</th><th className="text-right">Cash count</th><th className="text-right">Net remittance</th><th className="text-right">Discrepancy</th><th className="text-right">Diesel liters</th><th className="text-right">Special liters</th><th className="text-right">Unleaded liters</th></tr></thead>
+              <tbody>
+                {(result?.analytics.dailySummary ?? []).map((row) => (
+                  <tr className="border-t" key={row.date}>
+                    <td className="py-2">{formatDay(row.date)}</td>
+                    <td className="text-right">{row.reportCount}</td>
+                    <td className="text-right">{formatCurrency(row.totalFuelCashSales)}</td>
+                    <td className="text-right">{formatCurrency(row.totalExpenses)}</td>
+                    <td className="text-right">{formatCurrency(row.totalCashCount)}</td>
+                    <td className="text-right">{formatCurrency(row.totalNetRemittance)}</td>
+                    <td className="text-right">{formatCurrency(row.totalDiscrepancy)}</td>
+                    <td className="text-right">{formatLiters(row.dieselGrossLiters)}</td>
+                    <td className="text-right">{formatLiters(row.specialGrossLiters)}</td>
+                    <td className="text-right">{formatLiters(row.unleadedGrossLiters)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Cashier/Duty summary</CardTitle></CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-slate-500"><tr><th className="py-2">Duty/Cashier</th><th className="text-right">Reports</th><th className="text-right">Expenses</th><th className="text-right">Net remittance</th><th className="text-right">Discrepancy</th></tr></thead>
+              <tbody>
+                {(result?.analytics.cashierSummary ?? []).map((row) => (
+                  <tr key={row.dutyName} className="border-t"><td className="py-2">{row.dutyName}</td><td className="text-right">{row.reportCount}</td><td className="text-right">{formatCurrency(row.totalExpenses)}</td><td className="text-right">{formatCurrency(row.totalNetRemittance)}</td><td className="text-right">{formatCurrency(row.totalDiscrepancy)}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {loading ? <p className="text-sm text-slate-500">Loading executive analytics...</p> : null}
     </div>
   );
 }

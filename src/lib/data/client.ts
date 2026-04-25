@@ -59,6 +59,7 @@ export interface ShiftReportDetail extends Record<string, unknown> {
     id: string;
     category: string | null;
     description: string;
+    receipt_reference: string | null;
     amount: number;
     created_at: string;
   }>;
@@ -205,7 +206,7 @@ export async function fetchShiftReportDetail(reportId: string): Promise<ShiftRep
       .order("created_at", { ascending: true }),
     supabase
       .from("fuel_expenses")
-      .select("id, category, description, amount, created_at")
+      .select("id, category, description, receipt_reference, amount, created_at")
       .eq("shift_report_id", reportId)
       .order("created_at", { ascending: true }),
     supabase

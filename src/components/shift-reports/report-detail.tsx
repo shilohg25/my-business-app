@@ -489,6 +489,29 @@ export function ReportDetail() {
             </DataTable>
           </SectionCard>
 
+          <SectionCard title="Expenses" isEmpty={detail.expenses.length === 0} emptyMessage="No expenses recorded for this shift.">
+            <p className="mb-2 text-xs text-slate-500">Expense total: <span className="font-semibold text-slate-800">{formatCurrency(detail.expenses.reduce((sum, row) => sum + Number(row.amount ?? 0), 0))}</span></p>
+            <DataTable
+              headers={
+                <tr>
+                  <th className="py-1.5">Category</th>
+                  <th className="py-1.5">Description</th>
+                  <th className="py-1.5">Receipt reference</th>
+                  <th className="py-1.5 text-right">Amount</th>
+                </tr>
+              }
+            >
+              {detail.expenses.map((row) => (
+                <tr className="border-t border-slate-100" key={row.id}>
+                  <td className="py-1.5">{row.category ?? "-"}</td>
+                  <td className="py-1.5">{row.description}</td>
+                  <td className="py-1.5">{row.receipt_reference ?? "-"}</td>
+                  <td className="py-1.5 text-right tabular-nums">{formatCurrency(Number(row.amount ?? 0))}</td>
+                </tr>
+              ))}
+            </DataTable>
+          </SectionCard>
+
           <SectionCard title="Cash count" isEmpty={detail.cashCounts.length === 0} emptyMessage="No cash count rows found for this report.">
             <DataTable
               headers={
@@ -506,26 +529,6 @@ export function ReportDetail() {
                   <td className="py-1.5 text-right tabular-nums">{formatNumber(row.quantity, 0)}</td>
                   <td className="py-1.5 text-right tabular-nums">{formatCurrency(Number(row.amount ?? 0))}</td>
                   <td className="py-1.5">{row.note ?? "-"}</td>
-                </tr>
-              ))}
-            </DataTable>
-          </SectionCard>
-
-          <SectionCard title="Expenses" isEmpty={detail.expenses.length === 0} emptyMessage="No expenses found for this report.">
-            <DataTable
-              headers={
-                <tr>
-                  <th className="py-1.5">Description</th>
-                  <th className="py-1.5">Category</th>
-                  <th className="py-1.5 text-right">Amount</th>
-                </tr>
-              }
-            >
-              {detail.expenses.map((row) => (
-                <tr className="border-t border-slate-100" key={row.id}>
-                  <td className="py-1.5">{row.description}</td>
-                  <td className="py-1.5">{row.category ?? "-"}</td>
-                  <td className="py-1.5 text-right tabular-nums">{formatCurrency(Number(row.amount ?? 0))}</td>
                 </tr>
               ))}
             </DataTable>
