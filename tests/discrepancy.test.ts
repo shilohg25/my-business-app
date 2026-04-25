@@ -14,6 +14,11 @@ describe("discrepancy analytics", () => {
     expect(formatSignedCurrency(-123.45)).toBe("-₱123.45");
   });
 
+  it("does not render a double negative sign for shortages", () => {
+    expect(formatSignedCurrency(-0.5)).toBe("-₱0.50");
+    expect(formatSignedCurrency("-0.5")).toBe("-₱0.50");
+  });
+
   it("returns balanced label and zero currency for zero discrepancy", () => {
     expect(getDiscrepancyStatus(0)).toEqual({ tone: "neutral", label: "Balanced" });
     expect(getDiscrepancyLabel(0)).toBe("Balanced");

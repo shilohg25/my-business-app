@@ -51,6 +51,7 @@ describe("executive analytics", () => {
     expect(normalizeProductCode("ADO")).toBe("DIESEL");
     expect(normalizeProductCode("SPU")).toBe("SPECIAL");
     expect(normalizeProductCode("ULG")).toBe("UNLEADED");
+    expect(normalizeProductCode("unknown")).toBe("OTHER");
   });
 
 
@@ -81,6 +82,27 @@ describe("executive analytics", () => {
     expect(analytics.productLiters.DIESEL.calibrationLiters).toBe(2);
     expect(analytics.productLiters.DIESEL.creditLiters).toBe(3);
     expect(analytics.productLiters.DIESEL.netCashLiters).toBe(7);
+  });
+
+  it("uses liters_sold when available instead of computing after-before fallback", () => {
+    const analytics = buildExecutiveAnalytics({
+      reports: [{ id: "r1", report_date: "2026-04-10", duty_name: "A", status: "approved", calculated_totals: {}, discrepancy_amount: 0 }],
+      expenses: [],
+      meterReadings: [
+        {
+          id: "m1",
+          shift_report_id: "r1",
+          product_code_snapshot: "DIESEL",
+          before_reading: 100,
+          after_reading: 110,
+          liters_sold: 7,
+          calibration_liters: 0
+        }
+      ],
+      creditReceipts: []
+    });
+
+    expect(analytics.productLiters.DIESEL.grossLitersOut).toBe(7);
   });
 
   it("groups unknown products as OTHER", () => {
