@@ -2,6 +2,8 @@ import { createClient, type Session, type SupabaseClient } from "@supabase/supab
 
 let browserClient: SupabaseClient | null = null;
 
+const githubPagesBasePath = "/my-business-app";
+
 export interface SupabaseEnv {
   url: string;
   anonKey: string;
@@ -28,10 +30,23 @@ export class SupabaseConfigurationError extends Error {
   }
 }
 
+function cleanEnvValue(value: string | undefined) {
+  const trimmed = (value ?? "").trim();
+
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1).trim();
+  }
+
+  return trimmed;
+}
+
 export function getSupabaseEnv(): SupabaseEnv {
   return {
-    url: process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
-    anonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ""
+    url: cleanEnvValue(process.env.NEXT_PUBLIC_SUPABASE_URL),
+    anonKey: cleanEnvValue(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
   };
 }
 
@@ -68,12 +83,30 @@ export function getSupabaseConfigurationState(): SupabaseConfigurationState {
     };
   }
 
-  if (anonKey.includes("YOUR_") || anonKey.length < 20) {
+  if (parsedUrl.pathname !== "/" && parsedUrl.pathname !== "") {
     return {
       configured: false,
       url,
       anonKey,
-      reason: "NEXT_PUBLIC_SUPABASE_ANON_KEY is missing or still contains an example value."
+      reason: "NEXT_PUBLIC_SUPABASE_URL must be the Supabase project root URL, not /rest/v1/."
+    };
+  }
+
+  if (url.includes("YOUR_PROJECT_REF") || anonKey.includes("YOUR_SUPABASE") || anonKey.includes("YOUR_") || anonKey.length < 20) {
+    return {
+      configured: false,
+      url,
+      anonKey,
+      reason: "Supabase environment variables are missing or still contain example values."
+    };
+  }
+
+  if (anonKey.startsWith("sb_secret_")) {
+    return {
+      configured: false,
+      url,
+      anonKey,
+      reason: "Do not use a Supabase service-role or secret key in the public frontend."
     };
   }
 
@@ -129,12 +162,24 @@ export async function signOutOfSupabase() {
   if (error) throw error;
 }
 
+export function stripAppBasePath(path: string) {
+  if (path === githubPagesBasePath) return "/";
+  if (path.startsWith(`${githubPagesBasePath}/`)) return path.slice(githubPagesBasePath.length);
+  return path;
+}
+
+export function currentAppPath() {
+  if (typeof window === "undefined") return "/";
+  return `${stripAppBasePath(window.location.pathname)}${window.location.search}`;
+}
+
 export function appPath(path: string) {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
 
-  if (typeof window === "undefined") return normalizedPath;
+  if (typeof window === "undefined") {
+    return process.env.GITHUB_ACTIONS === "true" ? `${githubPagesBasePath}${normalizedPath}` : normalizedPath;
+  }
 
-  const githubPagesBasePath = "/my-business-app";
   const isGitHubPagesPath =
     window.location.pathname === githubPagesBasePath ||
     window.location.pathname.startsWith(`${githubPagesBasePath}/`);
