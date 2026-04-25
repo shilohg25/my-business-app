@@ -1,11 +1,31 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { canUseLiveData, listShiftReports, markReportStatus, type ShiftReportRow } from "@/lib/data/client";
 import { appPath, getSupabaseConfigurationState } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/utils";
+
+type ReportStatusFilter = "all" | "draft" | "submitted" | "reviewed" | "approved";
+
+function getTotalAsNumber(totals: Record<string, unknown>, key: string) {
+  const value = totals[key];
+  const numeric = Number(value ?? Number.NaN);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const toneByStatus: Record<string, string> = {
+    draft: "border-slate-300 bg-slate-100 text-slate-700",
+    submitted: "border-blue-200 bg-blue-50 text-blue-700",
+    reviewed: "border-amber-200 bg-amber-50 text-amber-700",
+    approved: "border-emerald-200 bg-emerald-50 text-emerald-700"
+  };
+
+  return <Badge className={toneByStatus[status] ?? ""}>{status || "-"}</Badge>;
+}
 
 export function ReportList() {
   const liveData = canUseLiveData();
@@ -15,6 +35,8 @@ export function ReportList() {
   const [loading, setLoading] = useState(liveData);
   const [busyReportId, setBusyReportId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<ReportStatusFilter>("all");
+  const [searchText, setSearchText] = useState("");
 
   async function refresh() {
     if (!liveData) {
@@ -26,7 +48,7 @@ export function ReportList() {
     setError(null);
 
     try {
-      setReports(await listShiftReports(50));
+      setReports(await listShiftReports(100));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to load reports.");
     } finally {
@@ -57,6 +79,23 @@ export function ReportList() {
     }
   }
 
+  const filteredReports = useMemo(() => {
+    const normalized = searchText.trim().toLowerCase();
+
+    return reports.filter((report) => {
+      if (statusFilter !== "all" && report.status !== statusFilter) {
+        return false;
+      }
+
+      if (!normalized) {
+        return true;
+      }
+
+      const haystack = `${report.duty_name ?? ""} ${report.shift_time_label ?? ""}`.toLowerCase();
+      return haystack.includes(normalized);
+    });
+  }, [reports, searchText, statusFilter]);
+
   return (
     <div className="rounded-2xl border bg-white p-5">
       {!liveData ? (
@@ -68,43 +107,83 @@ export function ReportList() {
       {error ? <p className="mb-4 text-sm text-red-700">{error}</p> : null}
       {loading ? <p className="text-sm text-slate-500">Loading reports...</p> : null}
 
+      {!loading ? (
+        <div className="mb-4 grid gap-3 md:grid-cols-[1fr_auto]">
+          <Input
+            aria-label="Search by duty cashier"
+            placeholder="Search duty/cashier or shift"
+            value={searchText}
+            onChange={(event) => setSearchText(event.target.value)}
+          />
+          <select
+            className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value as ReportStatusFilter)}
+          >
+            <option value="all">All statuses</option>
+            <option value="draft">Draft</option>
+            <option value="submitted">Submitted</option>
+            <option value="reviewed">Reviewed</option>
+            <option value="approved">Approved</option>
+          </select>
+        </div>
+      ) : null}
+
       {!loading && reports.length === 0 ? (
         <p className="text-sm text-slate-500">
           {liveData ? "No reports found. Create one manually or import an Excel workbook." : "No live report data is available in setup mode."}
         </p>
       ) : null}
 
-      {!loading && reports.length > 0 ? (
+      {!loading && reports.length > 0 && filteredReports.length === 0 ? (
+        <p className="text-sm text-slate-500">No reports matched your search/filter.</p>
+      ) : null}
+
+      {!loading && filteredReports.length > 0 ? (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="text-left text-slate-500">
               <tr>
                 <th className="py-2">Date</th>
-                <th>Station</th>
-                <th>Duty</th>
+                <th>Duty/Cashier</th>
                 <th>Shift</th>
-                <th>Source</th>
+                <th>Station</th>
                 <th>Status</th>
+                <th>Source</th>
+                <th className="text-right">Cash count</th>
+                <th className="text-right">Net remittance</th>
                 <th className="text-right">Discrepancy</th>
-                <th className="text-right">Action</th>
+                <th className="text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {reports.map((report) => {
+              {filteredReports.map((report) => {
                 const isApproved = report.status === "approved";
                 const isBusy = busyReportId === report.id;
+                const discrepancyAmount = Number(report.discrepancy_amount ?? 0);
+                const hasDiscrepancy = Number.isFinite(discrepancyAmount) && discrepancyAmount !== 0;
+                const totals = report.calculated_totals ?? {};
+                const cashCount = getTotalAsNumber(totals, "totalCashCount");
+                const netRemittance = getTotalAsNumber(totals, "operationalNetRemittance");
 
                 return (
                   <tr className="border-t" key={report.id}>
-                    <td className="py-3">{report.report_date}</td>
+                    <td className="py-3">{report.report_date || "-"}</td>
+                    <td>{report.duty_name || "-"}</td>
+                    <td>{report.shift_time_label || "-"}</td>
                     <td>{report.fuel_stations?.name ?? "-"}</td>
-                    <td>{report.duty_name}</td>
-                    <td>{report.shift_time_label}</td>
-                    <td>{report.source}</td>
                     <td>
-                      <Badge>{report.status}</Badge>
+                      <div className="flex items-center gap-2">
+                        <StatusBadge status={report.status} />
+                        {hasDiscrepancy ? (
+                          <Badge className="border-amber-200 bg-amber-50 text-amber-700">Discrepancy</Badge>
+                        ) : null}
+                      </div>
                     </td>
-                    <td className="text-right">{formatCurrency(Number(report.discrepancy_amount ?? 0))}</td>
+                    <td>{report.source || "-"}</td>
+                    <td className="text-right">{cashCount === null ? "-" : formatCurrency(cashCount)}</td>
+                    <td className="text-right">{netRemittance === null ? "-" : formatCurrency(netRemittance)}</td>
+                    <td className="text-right">{formatCurrency(discrepancyAmount)}</td>
                     <td className="text-right">
                       <div className="flex justify-end gap-2">
                         <a

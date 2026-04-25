@@ -29,10 +29,38 @@ body {
   }
 
   body {
-    background: white;
+    background: white !important;
+    color: #000 !important;
   }
 
   main {
     padding: 0 !important;
+    background: white !important;
+  }
+
+  [class*="bg-slate"],
+  [class*="bg-amber"],
+  [class*="bg-red"],
+  [class*="bg-emerald"] {
+    background: white !important;
+    color: #000 !important;
+  }
+
+  section,
+  article,
+  table,
+  tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  th,
+  td {
+    border-color: #d1d5db !important;
   }
 }
