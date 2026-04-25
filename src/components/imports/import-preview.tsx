@@ -8,6 +8,7 @@ import { BalanceSummary } from "@/components/shift-reports/balance-summary";
 import { parseOsrWorkbook, type ImportWarning } from "@/lib/imports/osr-parser";
 import { canUseLiveData, commitShiftReport } from "@/lib/data/client";
 import { appPath, getSupabaseConfigurationState } from "@/lib/supabase/client";
+import { formatCurrency } from "@/lib/utils";
 
 export function ImportPreview() {
   const liveData = canUseLiveData();
@@ -73,6 +74,15 @@ export function ImportPreview() {
   }
 
   const result = report ? calculateShiftReport(report) : null;
+  const lubricantSummary = report
+    ? {
+        totalQuantity: report.lubricantSales.reduce((sum, row) => sum + Number(row.quantity ?? 0), 0),
+        totalAmount: report.lubricantSales.reduce((sum, row) => sum + Number(row.quantity ?? 0) * Number(row.unitPrice ?? 0), 0),
+        missingNameCount: report.lubricantSales.filter((row) => !(row.productName ?? "").trim()).length,
+        zeroPriceCount: report.lubricantSales.filter((row) => Number(row.unitPrice ?? 0) <= 0).length
+      }
+    : null;
+
 
   return (
     <div className="space-y-5">
@@ -130,6 +140,19 @@ export function ImportPreview() {
       ) : null}
 
       {result ? <BalanceSummary result={result} /> : null}
+
+      {lubricantSummary ? (
+        <div className="rounded-2xl border bg-white p-5 text-sm">
+          <h3 className="font-semibold text-slate-900">Lubricant sales summary</h3>
+          <p className="mt-1 text-slate-600">Total lubricant quantity: <span className="font-medium text-slate-900">{lubricantSummary.totalQuantity.toFixed(2)}</span></p>
+          <p className="text-slate-600">Total lubricant amount: <span className="font-medium text-slate-900">{formatCurrency(lubricantSummary.totalAmount)}</span></p>
+          {lubricantSummary.missingNameCount > 0 || lubricantSummary.zeroPriceCount > 0 ? (
+            <p className="mt-2 text-amber-700">
+              Warning: workbook has lubricant rows with missing product names ({lubricantSummary.missingNameCount}) or zero unit price ({lubricantSummary.zeroPriceCount}).
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       {report ? (
         <div className="rounded-2xl border bg-white p-5">

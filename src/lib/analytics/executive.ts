@@ -67,6 +67,13 @@ export interface ExecutiveAnalytics {
     totalCashCount: number;
     totalNetRemittance: number;
     totalDiscrepancy: number;
+    netDiscrepancy: number;
+    totalCashOverage: number;
+    totalCashShortage: number;
+    discrepancyReportCount: number;
+    balancedReportCount: number;
+    cashOverageReportCount: number;
+    cashShortageReportCount: number;
   };
   productLiters: Record<string, ProductLiterSummary>;
   dailyExpenses: Array<{ date: string; amount: number; count: number }>;
@@ -130,6 +137,22 @@ export function buildExecutiveAnalytics(input: {
 
   const reportById = new Map(reports.map((report) => [report.id, report]));
 
+  const netDiscrepancy = reports.reduce((sum, report) => sum + toNumber(report.discrepancy_amount), 0);
+  const totalCashOverage = reports.reduce((sum, report) => {
+    const value = toNumber(report.discrepancy_amount);
+    return value > 0 ? sum + value : sum;
+  }, 0);
+  const totalCashShortage = Math.abs(
+    reports.reduce((sum, report) => {
+      const value = toNumber(report.discrepancy_amount);
+      return value < 0 ? sum + value : sum;
+    }, 0)
+  );
+  const discrepancyReportCount = reports.filter((report) => toNumber(report.discrepancy_amount) !== 0).length;
+  const balancedReportCount = reports.filter((report) => toNumber(report.discrepancy_amount) === 0).length;
+  const cashOverageReportCount = reports.filter((report) => toNumber(report.discrepancy_amount) > 0).length;
+  const cashShortageReportCount = reports.filter((report) => toNumber(report.discrepancy_amount) < 0).length;
+
   const totals = {
     reportCount: reports.length,
     approvedCount: reports.filter((report) => report.status === "approved").length,
@@ -139,7 +162,14 @@ export function buildExecutiveAnalytics(input: {
     totalLubricantSales: reports.reduce((sum, report) => sum + toNumber(report.calculated_totals?.totalLubricantSales), 0),
     totalCashCount: reports.reduce((sum, report) => sum + toNumber(report.calculated_totals?.totalCashCount), 0),
     totalNetRemittance: reports.reduce((sum, report) => sum + toNumber(report.calculated_totals?.operationalNetRemittance), 0),
-    totalDiscrepancy: reports.reduce((sum, report) => sum + toNumber(report.discrepancy_amount), 0)
+    totalDiscrepancy: netDiscrepancy,
+    netDiscrepancy,
+    totalCashOverage,
+    totalCashShortage,
+    discrepancyReportCount,
+    balancedReportCount,
+    cashOverageReportCount,
+    cashShortageReportCount
   };
 
   const productLiters: Record<string, ProductLiterSummary> = {
