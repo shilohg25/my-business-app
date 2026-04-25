@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { canUseLiveData, listShiftReports, markReportStatus, type ShiftReportRow } from "@/lib/data/client";
 import { appPath, getSupabaseConfigurationState } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/utils";
+import { formatSignedCurrency, getDiscrepancyLabel, getDiscrepancyStatus } from "@/lib/analytics/discrepancy";
 
 type ReportStatusFilter = "all" | "draft" | "submitted" | "reviewed" | "approved";
 
@@ -152,7 +153,7 @@ export function ReportList() {
                 <th>Source</th>
                 <th className="text-right">Cash count</th>
                 <th className="text-right">Net remittance</th>
-                <th className="text-right">Discrepancy</th>
+                <th className="text-right">Cash over/short</th>
                 <th className="text-right">Actions</th>
               </tr>
             </thead>
@@ -161,7 +162,6 @@ export function ReportList() {
                 const isApproved = report.status === "approved";
                 const isBusy = busyReportId === report.id;
                 const discrepancyAmount = Number(report.discrepancy_amount ?? 0);
-                const hasDiscrepancy = Number.isFinite(discrepancyAmount) && discrepancyAmount !== 0;
                 const totals = report.calculated_totals ?? {};
                 const cashCount = getTotalAsNumber(totals, "totalCashCount");
                 const netRemittance = getTotalAsNumber(totals, "operationalNetRemittance");
@@ -175,15 +175,13 @@ export function ReportList() {
                     <td>
                       <div className="flex items-center gap-2">
                         <StatusBadge status={report.status} />
-                        {hasDiscrepancy ? (
-                          <Badge className="border-amber-200 bg-amber-50 text-amber-700">Discrepancy</Badge>
-                        ) : null}
+                        <Badge className={getDiscrepancyStatus(discrepancyAmount).tone === "positive" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : getDiscrepancyStatus(discrepancyAmount).tone === "negative" ? "border-red-200 bg-red-50 text-red-700" : "border-slate-200 bg-slate-50 text-slate-700"}>{getDiscrepancyLabel(discrepancyAmount)}</Badge>
                       </div>
                     </td>
                     <td>{report.source || "-"}</td>
                     <td className="text-right">{cashCount === null ? "-" : formatCurrency(cashCount)}</td>
                     <td className="text-right">{netRemittance === null ? "-" : formatCurrency(netRemittance)}</td>
-                    <td className="text-right">{formatCurrency(discrepancyAmount)}</td>
+                    <td className="text-right">{formatSignedCurrency(discrepancyAmount)}</td>
                     <td className="text-right">
                       <div className="flex justify-end gap-2">
                         <a

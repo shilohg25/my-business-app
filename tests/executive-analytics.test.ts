@@ -97,4 +97,25 @@ describe("executive analytics", () => {
 
     expect(analytics.productLiters.OTHER.grossLitersOut).toBe(10);
   });
+
+
+  it("calculates discrepancy totals and counts", () => {
+    const analytics = buildExecutiveAnalytics({
+      reports: [
+        { id: "r1", report_date: "2026-04-10", duty_name: "A", status: "approved", calculated_totals: {}, discrepancy_amount: 100 },
+        { id: "r2", report_date: "2026-04-11", duty_name: "B", status: "approved", calculated_totals: {}, discrepancy_amount: -40 },
+        { id: "r3", report_date: "2026-04-12", duty_name: "C", status: "approved", calculated_totals: {}, discrepancy_amount: 0 }
+      ],
+      expenses: [],
+      meterReadings: [],
+      creditReceipts: []
+    });
+
+    expect(analytics.totals.totalCashOverage).toBe(100);
+    expect(analytics.totals.totalCashShortage).toBe(40);
+    expect(analytics.totals.netDiscrepancy).toBe(60);
+    expect(analytics.totals.discrepancyReportCount).toBe(2);
+    expect(analytics.totals.balancedReportCount).toBe(1);
+  });
+
 });

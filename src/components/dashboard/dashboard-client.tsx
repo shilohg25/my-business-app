@@ -6,6 +6,8 @@ import { canUseLiveData } from "@/lib/data/client";
 import { fetchExecutiveAnalytics } from "@/lib/data/executive";
 import { appPath, getSupabaseConfigurationState } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/utils";
+import { formatSignedCurrency } from "@/lib/analytics/discrepancy";
+import { fetchLubricantControlData } from "@/lib/data/lubricants";
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -27,6 +29,7 @@ export function DashboardClient() {
   const [loading, setLoading] = useState(liveData);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<Awaited<ReturnType<typeof fetchExecutiveAnalytics>> | null>(null);
+  const [lubricants, setLubricants] = useState<Awaited<ReturnType<typeof fetchLubricantControlData>> | null>(null);
 
   useEffect(() => {
     if (!liveData) {
@@ -39,10 +42,14 @@ export function DashboardClient() {
     setLoading(true);
     setError(null);
 
-    fetchExecutiveAnalytics({ startDate: startOfMonthIso(), endDate: todayIso() })
-      .then((data) => {
+    Promise.all([
+      fetchExecutiveAnalytics({ startDate: startOfMonthIso(), endDate: todayIso() }),
+      fetchLubricantControlData({ startDate: startOfMonthIso(), endDate: todayIso() })
+    ])
+      .then(([analyticsData, lubricantData]) => {
         if (!active) return;
-        setResult(data);
+        setResult(analyticsData);
+        setLubricants(lubricantData);
       })
       .catch((nextError: Error) => {
         if (!active) return;
@@ -87,7 +94,11 @@ export function DashboardClient() {
         <Card><CardHeader><CardDescription>Month-to-date fuel cash sales</CardDescription><CardTitle>{formatCurrency(totals?.totalFuelCashSales ?? 0)}</CardTitle></CardHeader></Card>
         <Card><CardHeader><CardDescription>Month-to-date expenses</CardDescription><CardTitle>{formatCurrency(totals?.totalExpenses ?? 0)}</CardTitle></CardHeader></Card>
         <Card><CardHeader><CardDescription>Month-to-date net remittance</CardDescription><CardTitle>{formatCurrency(totals?.totalNetRemittance ?? 0)}</CardTitle></CardHeader></Card>
-        <Card><CardHeader><CardDescription>Month-to-date discrepancy</CardDescription><CardTitle>{formatCurrency(totals?.totalDiscrepancy ?? 0)}</CardTitle></CardHeader></Card>
+        <Card><CardHeader><CardDescription>Month-to-date net cash over/short</CardDescription><CardTitle>{formatSignedCurrency(totals?.netDiscrepancy ?? 0)}</CardTitle></CardHeader></Card>
+        <Card><CardHeader><CardDescription>Lubricant sales this month</CardDescription><CardTitle>{formatCurrency(lubricants?.analytics.totalSalesAmount ?? 0)}</CardTitle></CardHeader></Card>
+        <Card><CardHeader><CardDescription>Low-stock lubricant warnings</CardDescription><CardTitle>{(lubricants?.analytics.warehouseLowStockCount ?? 0) + (lubricants?.analytics.stationLowStockCount ?? 0)}</CardTitle></CardHeader></Card>
+        <Card><CardHeader><CardDescription>Cash shortage reports</CardDescription><CardTitle>{totals?.cashShortageReportCount ?? 0}</CardTitle></CardHeader></Card>
+        <Card><CardHeader><CardDescription>Cash overage reports</CardDescription><CardTitle>{totals?.cashOverageReportCount ?? 0}</CardTitle></CardHeader></Card>
         <Card><CardHeader><CardDescription>Diesel gross liters out</CardDescription><CardTitle>{formatLiters(liters.DIESEL?.grossLitersOut ?? 0)}</CardTitle></CardHeader></Card>
         <Card><CardHeader><CardDescription>Special gross liters out</CardDescription><CardTitle>{formatLiters(liters.SPECIAL?.grossLitersOut ?? 0)}</CardTitle></CardHeader></Card>
         <Card><CardHeader><CardDescription>Unleaded gross liters out</CardDescription><CardTitle>{formatLiters(liters.UNLEADED?.grossLitersOut ?? 0)}</CardTitle></CardHeader></Card>

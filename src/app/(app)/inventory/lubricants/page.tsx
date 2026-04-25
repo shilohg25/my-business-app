@@ -1,17 +1,13 @@
-import { Card, CardContent } from "@/components/ui/card";
+import { LubricantsClient } from "@/components/lubricants/lubricants-client";
 
 export default function Page() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Station Lubricants</h1>
-        <p className="text-sm text-slate-500">Track lubricant stock by station and product.</p>
+        <h1 className="text-2xl font-semibold tracking-tight">Lubricant Control</h1>
+        <p className="text-sm text-slate-500">Track lubricant sales, station stock, warehouse stock, movements, and reorder warnings.</p>
       </div>
-      <Card>
-        <CardContent>
-          <p className="text-sm text-slate-500">Module route is scaffolded. Add server data access and forms in this directory.</p>
-        </CardContent>
-      </Card>
+      <LubricantsClient />
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { canUseLiveData, fetchShiftReportDetail, markReportStatus, type ShiftReportDetail } from "@/lib/data/client";
 import { appPath, getSupabaseConfigurationState } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/utils";
+import { formatSignedCurrency, getDiscrepancyLabel } from "@/lib/analytics/discrepancy";
 
 function formatNumber(value: number | string | null | undefined, digits = 2) {
   const numeric = Number(value ?? Number.NaN);
@@ -357,7 +358,7 @@ export function ReportDetail() {
   const hasDiscrepancy = Number.isFinite(discrepancy) && discrepancy !== 0;
 
   const reviewFlags = [
-    hasDiscrepancy ? "Workbook discrepancy is not zero." : null,
+    hasDiscrepancy ? `${getDiscrepancyLabel(discrepancy)} detected in cash over/short.` : null,
     detail && detail.meterReadings.length === 0 ? "No meter readings recorded." : null,
     detail && detail.cashCounts.length === 0 ? "No cash count rows recorded." : null,
     detail && !detail.report.fuel_stations?.name ? "No station linked to this report." : null,
@@ -369,8 +370,8 @@ export function ReportDetail() {
     { label: "Cash count", value: formatValue(totals.totalCashCount, "currency") },
     { label: "Expected cash before expenses", value: formatValue(totals.expectedCashBeforeExpenses, "currency") },
     {
-      label: "Workbook discrepancy",
-      value: formatValue(totals.workbookStyleDiscrepancy, "currency"),
+      label: "Cash over/short",
+      value: formatSignedCurrency(totals.workbookStyleDiscrepancy as number | string | null | undefined),
       tone: hasDiscrepancy ? ("warning" as const) : ("default" as const)
     },
     { label: "Fuel cash sales", value: formatValue(totals.totalFuelCashSales, "currency") },
@@ -534,7 +535,9 @@ export function ReportDetail() {
             </DataTable>
           </SectionCard>
 
-          <SectionCard title="Lubricant sales" isEmpty={detail.lubricantSales.length === 0} emptyMessage="No lubricant sales found for this report.">
+          <SectionCard title="Lubricant sales" isEmpty={detail.lubricantSales.length === 0} emptyMessage="No lubricant sales recorded for this shift.">
+            <p className="mb-2 text-xs text-slate-500">Total lubricant sales amount: <span className="font-semibold text-slate-800">{formatCurrency(detail.lubricantSales.reduce((sum, row) => sum + Number(row.amount ?? 0), 0))}</span></p>
+            <p className="mb-2 text-xs text-slate-500">Total lubricant units: <span className="font-semibold text-slate-800">{formatNumber(detail.lubricantSales.reduce((sum, row) => sum + Number(row.quantity ?? 0), 0), 2)}</span></p>
             <DataTable
               headers={
                 <tr>
