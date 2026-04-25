@@ -54,27 +54,22 @@ function formatValue(value: unknown, kind: "currency" | "number" | "liters" = "n
 type SummaryMetricProps = {
   label: string;
   value: string;
-  tone?: "default" | "success" | "warning";
+  tone?: "default" | "warning";
 };
 
 function SummaryMetric({ label, value, tone = "default" }: SummaryMetricProps) {
-  const toneClass =
-    tone === "warning"
-      ? "border-amber-300 bg-amber-50"
-      : tone === "success"
-        ? "border-emerald-300 bg-emerald-50"
-        : "border-slate-200 bg-white";
+  const toneClass = tone === "warning" ? "border-amber-300 bg-amber-50" : "border-slate-200 bg-white";
 
   return (
-    <article className={`rounded-xl border px-4 py-3 ${toneClass}`}>
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-1 text-lg font-semibold text-slate-900">{value}</p>
+    <article className={`rounded-xl border px-3 py-2.5 ${toneClass}`}>
+      <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="mt-1 text-base font-semibold text-slate-900">{value}</p>
     </article>
   );
 }
 
 function EmptyState({ message }: { message: string }) {
-  return <p className="text-sm text-slate-500">{message}</p>;
+  return <p className="text-xs text-slate-500">{message}</p>;
 }
 
 type SectionCardProps = {
@@ -88,9 +83,9 @@ type SectionCardProps = {
 
 function SectionCard({ title, description, emptyMessage, isEmpty, subtle = false, children }: SectionCardProps) {
   return (
-    <section className={`rounded-2xl border bg-white ${subtle ? "p-4" : "p-5"}`}>
-      <div className="mb-3">
-        <h2 className={`${subtle ? "text-base" : "text-lg"} font-semibold text-slate-900`}>{title}</h2>
+    <section className={`rounded-2xl border border-slate-200 bg-white ${subtle ? "p-3.5" : "p-4"}`}>
+      <div className="mb-2.5">
+        <h2 className={`${subtle ? "text-sm" : "text-base"} font-semibold text-slate-900`}>{title}</h2>
         {description ? <p className="mt-1 text-xs text-slate-500">{description}</p> : null}
       </div>
       {isEmpty ? <EmptyState message={emptyMessage ?? "No records found."} /> : children}
@@ -101,11 +96,19 @@ function SectionCard({ title, description, emptyMessage, isEmpty, subtle = false
 function DataTable({ headers, children }: { headers: ReactNode; children: ReactNode }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead className="text-left text-xs uppercase tracking-wide text-slate-500">{headers}</thead>
+      <table className="w-full text-xs">
+        <thead className="text-left text-[11px] uppercase tracking-wide text-slate-500">{headers}</thead>
         <tbody className="text-slate-700">{children}</tbody>
       </table>
     </div>
+  );
+}
+
+function StatusPill({ status }: { status: string }) {
+  return (
+    <span className="rounded-full border border-slate-300 bg-slate-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-700">
+      {status}
+    </span>
   );
 }
 
@@ -127,22 +130,20 @@ function ReviewHeader({ detail, id }: { detail: ShiftReportDetail; id: string })
   const status = detail.report.status || "Unknown";
 
   return (
-    <section className="rounded-2xl border bg-white p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <section className="rounded-2xl border border-slate-200 bg-white p-4">
+      <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <a className="text-sm font-medium text-slate-700 hover:text-slate-900" href={appPath("/shift-reports/")}>
+          <a className="text-xs font-medium text-slate-700 hover:text-slate-900" href={appPath("/shift-reports/")}>
             ← Back to Daily Shift Reports
           </a>
-          <h2 className="mt-2 text-lg font-semibold text-slate-900">Shift report review</h2>
+          <h2 className="mt-1.5 text-lg font-semibold text-slate-900">Shift report review</h2>
           <p className="text-xs text-slate-500">Report ID: {id}</p>
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="rounded-full border border-slate-300 bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-700">
-            {status}
-          </span>
+          <StatusPill status={status} />
           <button
-            className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+            className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
             onClick={() => window.print()}
             type="button"
           >
@@ -151,7 +152,7 @@ function ReviewHeader({ detail, id }: { detail: ShiftReportDetail; id: string })
         </div>
       </div>
 
-      <div className="mt-4 grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-3 grid gap-1.5 text-xs sm:grid-cols-2 lg:grid-cols-4">
         <p><span className="text-slate-500">Report date:</span> {formatDate(detail.report.report_date)}</p>
         <p><span className="text-slate-500">Shift time:</span> {detail.report.shift_time_label || "-"}</p>
         <p><span className="text-slate-500">Duty/Cashier:</span> {detail.report.duty_name || "-"}</p>
@@ -213,7 +214,18 @@ export function ReportDetail() {
   }, [config.reason, id, liveData]);
 
   const totals = detail?.report.calculated_totals ?? {};
-  const hasNestedDetails = Object.entries(totals).some(([, value]) => typeof value === "object" && value !== null);
+  const summaryTotalKeys = new Set([
+    "operationalNetRemittance",
+    "totalCashCount",
+    "expectedCashBeforeExpenses",
+    "workbookStyleDiscrepancy",
+    "totalFuelCashSales",
+    "totalLubricantSales",
+    "totalCreditLiters",
+    "totalNetCashLiters"
+  ]);
+  const detailedCalculationRows = Object.entries(totals).filter(([key]) => !summaryTotalKeys.has(key));
+  const hasDetailedCalculationData = detailedCalculationRows.length > 0;
 
   const discrepancy = Number(totals.workbookStyleDiscrepancy ?? detail?.report.discrepancy_amount ?? 0);
   const hasDiscrepancy = Number.isFinite(discrepancy) && discrepancy !== 0;
@@ -233,7 +245,7 @@ export function ReportDetail() {
     {
       label: "Workbook discrepancy",
       value: formatValue(totals.workbookStyleDiscrepancy, "currency"),
-      tone: hasDiscrepancy ? ("warning" as const) : ("success" as const)
+      tone: hasDiscrepancy ? ("warning" as const) : ("default" as const)
     },
     { label: "Fuel cash sales", value: formatValue(totals.totalFuelCashSales, "currency") },
     { label: "Lubricant sales", value: formatValue(totals.totalLubricantSales, "currency") },
@@ -242,7 +254,7 @@ export function ReportDetail() {
   ];
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {loading ? <div className="rounded-2xl border bg-white p-5 text-sm text-slate-500">Loading report details...</div> : null}
 
       {error ? (
@@ -257,7 +269,7 @@ export function ReportDetail() {
           <ReviewHeader detail={detail} id={id} />
 
           <SectionCard title="Approval Summary" description="Key totals for quick manager review.">
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
               {summaryMetrics.map((metric) => (
                 <SummaryMetric key={metric.label} label={metric.label} tone={metric.tone} value={metric.value} />
               ))}
@@ -266,21 +278,32 @@ export function ReportDetail() {
 
           <ReviewFlags flags={reviewFlags} />
 
-          {hasNestedDetails ? (
+          {hasDetailedCalculationData ? (
             <SectionCard
               description="Expanded data from calculated totals for secondary reference."
               subtle
               title="Detailed calculation data"
             >
-              <details>
-                <summary className="cursor-pointer text-sm font-medium text-slate-700">Show detailed calculation data</summary>
-                <pre className="mt-3 overflow-x-auto rounded-lg bg-slate-50 p-3 text-xs text-slate-700">
-                  {JSON.stringify(
-                    Object.fromEntries(Object.entries(totals).filter(([, value]) => typeof value === "object" && value !== null)),
-                    null,
-                    2
-                  )}
-                </pre>
+              <details className="rounded-lg border border-slate-200 bg-slate-50/50 p-2.5">
+                <summary className="cursor-pointer text-xs font-medium text-slate-700">Show detailed calculation data</summary>
+                <div className="mt-2 overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead className="text-left text-[11px] uppercase tracking-wide text-slate-500">
+                      <tr>
+                        <th className="py-1.5">Key</th>
+                        <th className="py-1.5">Value</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {detailedCalculationRows.map(([key, value]) => (
+                        <tr className="border-t border-slate-200" key={key}>
+                          <td className="py-1.5 pr-3 font-medium text-slate-700">{key}</td>
+                          <td className="py-1.5 text-slate-600">{typeof value === "object" ? JSON.stringify(value) : String(value ?? "-")}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </details>
             </SectionCard>
           ) : null}
@@ -289,23 +312,23 @@ export function ReportDetail() {
             <DataTable
               headers={
                 <tr>
-                  <th className="py-2">Pump</th>
-                  <th className="py-2">Product</th>
-                  <th className="py-2 text-right">Before</th>
-                  <th className="py-2 text-right">After</th>
-                  <th className="py-2 text-right">Gross liters</th>
-                  <th className="py-2 text-right">Calibration</th>
+                  <th className="py-1.5">Pump</th>
+                  <th className="py-1.5">Product</th>
+                  <th className="py-1.5 text-right">Before</th>
+                  <th className="py-1.5 text-right">After</th>
+                  <th className="py-1.5 text-right">Gross liters</th>
+                  <th className="py-1.5 text-right">Calibration</th>
                 </tr>
               }
             >
               {detail.meterReadings.map((row) => (
                 <tr className="border-t border-slate-100" key={row.id}>
-                  <td className="py-2">{row.pump_label_snapshot}</td>
-                  <td className="py-2">{row.product_code_snapshot}</td>
-                  <td className="py-2 text-right tabular-nums">{formatNumber(row.before_reading, 3)}</td>
-                  <td className="py-2 text-right tabular-nums">{formatNumber(row.after_reading, 3)}</td>
-                  <td className="py-2 text-right tabular-nums">{formatNumber(row.liters_sold, 3)}</td>
-                  <td className="py-2 text-right tabular-nums">{formatNumber(row.calibration_liters, 3)}</td>
+                  <td className="py-1.5">{row.pump_label_snapshot}</td>
+                  <td className="py-1.5">{row.product_code_snapshot}</td>
+                  <td className="py-1.5 text-right tabular-nums">{formatNumber(row.before_reading, 3)}</td>
+                  <td className="py-1.5 text-right tabular-nums">{formatNumber(row.after_reading, 3)}</td>
+                  <td className="py-1.5 text-right tabular-nums">{formatNumber(row.liters_sold, 3)}</td>
+                  <td className="py-1.5 text-right tabular-nums">{formatNumber(row.calibration_liters, 3)}</td>
                 </tr>
               ))}
             </DataTable>
@@ -315,21 +338,21 @@ export function ReportDetail() {
             <DataTable
               headers={
                 <tr>
-                  <th className="py-2">Company</th>
-                  <th className="py-2">Receipt #</th>
-                  <th className="py-2">Product</th>
-                  <th className="py-2 text-right">Liters</th>
-                  <th className="py-2 text-right">Amount</th>
+                  <th className="py-1.5">Company</th>
+                  <th className="py-1.5">Receipt #</th>
+                  <th className="py-1.5">Product</th>
+                  <th className="py-1.5 text-right">Liters</th>
+                  <th className="py-1.5 text-right">Amount</th>
                 </tr>
               }
             >
               {detail.creditReceipts.map((row) => (
                 <tr className="border-t border-slate-100" key={row.id}>
-                  <td className="py-2">{row.company_name}</td>
-                  <td className="py-2">{row.receipt_number || "-"}</td>
-                  <td className="py-2">{row.product_code_snapshot}</td>
-                  <td className="py-2 text-right tabular-nums">{formatNumber(row.liters, 3)}</td>
-                  <td className="py-2 text-right tabular-nums">{formatCurrency(Number(row.amount ?? 0))}</td>
+                  <td className="py-1.5">{row.company_name}</td>
+                  <td className="py-1.5">{row.receipt_number || "-"}</td>
+                  <td className="py-1.5">{row.product_code_snapshot}</td>
+                  <td className="py-1.5 text-right tabular-nums">{formatNumber(row.liters, 3)}</td>
+                  <td className="py-1.5 text-right tabular-nums">{formatCurrency(Number(row.amount ?? 0))}</td>
                 </tr>
               ))}
             </DataTable>
@@ -339,19 +362,19 @@ export function ReportDetail() {
             <DataTable
               headers={
                 <tr>
-                  <th className="py-2">Denomination</th>
-                  <th className="py-2 text-right">Quantity</th>
-                  <th className="py-2 text-right">Amount</th>
-                  <th className="py-2">Note</th>
+                  <th className="py-1.5">Denomination</th>
+                  <th className="py-1.5 text-right">Quantity</th>
+                  <th className="py-1.5 text-right">Amount</th>
+                  <th className="py-1.5">Note</th>
                 </tr>
               }
             >
               {detail.cashCounts.map((row) => (
                 <tr className="border-t border-slate-100" key={row.id}>
-                  <td className="py-2">{formatCurrency(Number(row.denomination ?? 0))}</td>
-                  <td className="py-2 text-right tabular-nums">{formatNumber(row.quantity, 0)}</td>
-                  <td className="py-2 text-right tabular-nums">{formatCurrency(Number(row.amount ?? 0))}</td>
-                  <td className="py-2">{row.note ?? "-"}</td>
+                  <td className="py-1.5">{formatCurrency(Number(row.denomination ?? 0))}</td>
+                  <td className="py-1.5 text-right tabular-nums">{formatNumber(row.quantity, 0)}</td>
+                  <td className="py-1.5 text-right tabular-nums">{formatCurrency(Number(row.amount ?? 0))}</td>
+                  <td className="py-1.5">{row.note ?? "-"}</td>
                 </tr>
               ))}
             </DataTable>
@@ -361,17 +384,17 @@ export function ReportDetail() {
             <DataTable
               headers={
                 <tr>
-                  <th className="py-2">Description</th>
-                  <th className="py-2">Category</th>
-                  <th className="py-2 text-right">Amount</th>
+                  <th className="py-1.5">Description</th>
+                  <th className="py-1.5">Category</th>
+                  <th className="py-1.5 text-right">Amount</th>
                 </tr>
               }
             >
               {detail.expenses.map((row) => (
                 <tr className="border-t border-slate-100" key={row.id}>
-                  <td className="py-2">{row.description}</td>
-                  <td className="py-2">{row.category ?? "-"}</td>
-                  <td className="py-2 text-right tabular-nums">{formatCurrency(Number(row.amount ?? 0))}</td>
+                  <td className="py-1.5">{row.description}</td>
+                  <td className="py-1.5">{row.category ?? "-"}</td>
+                  <td className="py-1.5 text-right tabular-nums">{formatCurrency(Number(row.amount ?? 0))}</td>
                 </tr>
               ))}
             </DataTable>
@@ -381,19 +404,19 @@ export function ReportDetail() {
             <DataTable
               headers={
                 <tr>
-                  <th className="py-2">Product</th>
-                  <th className="py-2 text-right">Quantity</th>
-                  <th className="py-2 text-right">Unit price</th>
-                  <th className="py-2 text-right">Amount</th>
+                  <th className="py-1.5">Product</th>
+                  <th className="py-1.5 text-right">Quantity</th>
+                  <th className="py-1.5 text-right">Unit price</th>
+                  <th className="py-1.5 text-right">Amount</th>
                 </tr>
               }
             >
               {detail.lubricantSales.map((row) => (
                 <tr className="border-t border-slate-100" key={row.id}>
-                  <td className="py-2">{row.product_name_snapshot}</td>
-                  <td className="py-2 text-right tabular-nums">{formatNumber(row.quantity, 2)}</td>
-                  <td className="py-2 text-right tabular-nums">{formatCurrency(Number(row.unit_price ?? 0))}</td>
-                  <td className="py-2 text-right tabular-nums">{formatCurrency(Number(row.amount ?? 0))}</td>
+                  <td className="py-1.5">{row.product_name_snapshot}</td>
+                  <td className="py-1.5 text-right tabular-nums">{formatNumber(row.quantity, 2)}</td>
+                  <td className="py-1.5 text-right tabular-nums">{formatCurrency(Number(row.unit_price ?? 0))}</td>
+                  <td className="py-1.5 text-right tabular-nums">{formatCurrency(Number(row.amount ?? 0))}</td>
                 </tr>
               ))}
             </DataTable>
@@ -409,19 +432,19 @@ export function ReportDetail() {
             <DataTable
               headers={
                 <tr>
-                  <th className="py-2">When</th>
-                  <th className="py-2">Action</th>
-                  <th className="py-2">Actor role</th>
-                  <th className="py-2">Details</th>
+                  <th className="py-1.5">When</th>
+                  <th className="py-1.5">Action</th>
+                  <th className="py-1.5">Actor role</th>
+                  <th className="py-1.5">Details</th>
                 </tr>
               }
             >
               {detail.auditHistory.map((row) => (
                 <tr className="border-t border-slate-100" key={row.id}>
-                  <td className="py-2">{formatDateTime(row.created_at)}</td>
-                  <td className="py-2">{row.action_type}</td>
-                  <td className="py-2">{row.actor_role ?? "-"}</td>
-                  <td className="py-2">{row.explanation ?? row.details ?? "-"}</td>
+                  <td className="py-1.5">{formatDateTime(row.created_at)}</td>
+                  <td className="py-1.5">{row.action_type}</td>
+                  <td className="py-1.5">{row.actor_role ?? "-"}</td>
+                  <td className="py-1.5">{row.explanation ?? row.details ?? "-"}</td>
                 </tr>
               ))}
             </DataTable>
