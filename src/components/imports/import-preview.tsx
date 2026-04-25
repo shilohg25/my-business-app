@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { BalanceSummary } from "@/components/shift-reports/balance-summary";
 import { parseOsrWorkbook, type ImportWarning } from "@/lib/imports/osr-parser";
 import { canUseLiveData, commitShiftReport } from "@/lib/data/client";
-import { getSupabaseConfigurationState } from "@/lib/supabase/client";
+import { appPath, getSupabaseConfigurationState } from "@/lib/supabase/client";
 
 export function ImportPreview() {
   const liveData = canUseLiveData();
@@ -19,11 +19,13 @@ export function ImportPreview() {
   const [workbookTotals, setWorkbookTotals] = useState<Record<string, number | undefined>>({});
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [savedReportId, setSavedReportId] = useState<string | null>(null);
   const [committing, setCommitting] = useState(false);
 
   async function handleFile(file: File) {
     setError(null);
     setMessage(null);
+    setSavedReportId(null);
     setFileName(file.name);
 
     try {
@@ -61,7 +63,8 @@ export function ImportPreview() {
         workbookTotals
       });
 
-      setMessage(`Imported and committed report ${reportId}.`);
+      setSavedReportId(reportId);
+      setMessage("Import committed successfully.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Commit failed.");
     } finally {
@@ -92,6 +95,27 @@ export function ImportPreview() {
         {fileName ? <p className="mt-2 text-sm text-slate-500">Selected: {fileName}</p> : null}
         {error ? <p className="mt-3 text-sm text-red-700">{error}</p> : null}
         {message ? <p className="mt-3 text-sm text-green-700">{message}</p> : null}
+
+        {savedReportId ? (
+          <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+            <p className="font-semibold">Import committed successfully.</p>
+            <p className="mt-1">Saved report id: {savedReportId}</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <a
+                href={appPath(`/shift-reports/view/?id=${savedReportId}`)}
+                className="inline-flex h-9 items-center justify-center rounded-lg border border-emerald-300 bg-white px-3 text-xs font-medium hover:bg-emerald-100"
+              >
+                View saved report
+              </a>
+              <a
+                href={appPath("/shift-reports/")}
+                className="inline-flex h-9 items-center justify-center rounded-lg border border-emerald-300 bg-white px-3 text-xs font-medium hover:bg-emerald-100"
+              >
+                Open Daily Shift Reports
+              </a>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {warnings.length > 0 ? (
@@ -125,8 +149,8 @@ export function ImportPreview() {
             {JSON.stringify(report, null, 2)}
           </pre>
 
-          <Button className="mt-4" onClick={commit} disabled={committing || !liveData}>
-            {committing ? "Committing..." : liveData ? "Commit import" : "Connect Supabase to commit"}
+          <Button className="mt-4" onClick={commit} disabled={committing || !liveData || Boolean(savedReportId)}>
+            {committing ? "Committing..." : savedReportId ? "Import committed" : liveData ? "Commit import" : "Connect Supabase to commit"}
           </Button>
         </div>
       ) : null}
