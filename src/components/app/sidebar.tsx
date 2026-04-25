@@ -1,7 +1,5 @@
 "use client";
 
-import Image from "next/image";
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
@@ -15,18 +13,19 @@ import {
   Settings
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { appPath } from "@/lib/supabase/client";
 
 const items = [
-  { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
-  { href: "/stations", label: "Stations", icon: Fuel },
-  { href: "/shifts", label: "Shifts", icon: Gauge },
-  { href: "/shift-reports", label: "Shift Reports", icon: ClipboardList },
-  { href: "/imports", label: "Imports", icon: FileInput },
-  { href: "/reports", label: "Reports", icon: Database },
-  { href: "/inventory/lubricants", label: "Lubricants", icon: Package },
-  { href: "/inventory/bodega", label: "Bodega", icon: Package },
-  { href: "/audit-logs", label: "Audit Logs", icon: History },
-  { href: "/settings", label: "Settings", icon: Settings }
+  { href: "/dashboard/", label: "Dashboard", icon: BarChart3 },
+  { href: "/stations/", label: "Stations", icon: Fuel },
+  { href: "/shifts/", label: "Shifts", icon: Gauge },
+  { href: "/shift-reports/", label: "Shift Reports", icon: ClipboardList },
+  { href: "/imports/", label: "Imports", icon: FileInput },
+  { href: "/reports/", label: "Reports", icon: Database },
+  { href: "/inventory/lubricants/", label: "Lubricants", icon: Package },
+  { href: "/inventory/bodega/", label: "Bodega", icon: Package },
+  { href: "/audit-logs/", label: "Audit Logs", icon: History },
+  { href: "/settings/", label: "Settings", icon: Settings }
 ];
 
 export function Sidebar() {
@@ -36,7 +35,7 @@ export function Sidebar() {
     <aside className="no-print hidden w-72 shrink-0 border-r bg-white px-4 py-5 lg:block">
       <div className="mb-6 flex items-center gap-3">
         <div className="relative h-14 w-14 overflow-hidden rounded-full border bg-white">
-          <Image src="/logo.png" alt="AKY logo" fill className="object-contain" priority />
+          <img src={appPath("/logo.png")} alt="AKY logo" className="h-full w-full object-contain" />
         </div>
         <div>
           <div className="font-semibold">AKY Fuel Ops</div>
@@ -46,12 +45,13 @@ export function Sidebar() {
 
       <nav className="space-y-1">
         {items.map((item) => {
-          const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+          const normalizedItemPath = item.href.replace(/\/$/, "");
+          const isActive = pathname === normalizedItemPath || pathname.startsWith(`${normalizedItemPath}/`);
 
           return (
-            <Link
+            <a
               key={item.href}
-              href={item.href}
+              href={appPath(item.href)}
               className={cn(
                 "flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition",
                 isActive
@@ -61,7 +61,7 @@ export function Sidebar() {
             >
               <item.icon className="h-4 w-4" />
               {item.label}
-            </Link>
+            </a>
           );
         })}
       </nav>
