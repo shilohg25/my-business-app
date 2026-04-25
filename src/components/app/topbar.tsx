@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { appPath, createSupabaseBrowserClient, isSupabaseConfigured, signOutOfSupabase } from "@/lib/supabase/client";
@@ -70,25 +69,21 @@ export function Topbar() {
           Print
         </Button>
 
-        <Link
+        <a
           className="inline-flex h-10 items-center justify-center rounded-xl bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800"
-          href="/shift-reports/new"
+          href={appPath("/shift-reports/new/")}
         >
           New Shift Report
-        </Link>
+        </a>
 
         {!configured ? (
-          <Link className="inline-flex h-10 items-center justify-center rounded-xl border px-4 text-sm font-medium" href="/login">
-            Setup
-          </Link>
+          <a className="inline-flex h-10 items-center justify-center rounded-xl border px-4 text-sm font-medium" href={appPath("/login/")}>Setup</a>
         ) : email ? (
           <Button variant="outline" onClick={signOut}>
             Sign out
           </Button>
         ) : (
-          <Link className="inline-flex h-10 items-center justify-center rounded-xl border px-4 text-sm font-medium" href="/login">
-            Login
-          </Link>
+          <a className="inline-flex h-10 items-center justify-center rounded-xl border px-4 text-sm font-medium" href={appPath("/login/")}>Login</a>
         )}
       </div>
     </header>
