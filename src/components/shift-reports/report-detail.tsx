@@ -131,7 +131,7 @@ function ReviewHeader({ detail, id }: { detail: ShiftReportDetail; id: string })
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <a className="text-sm font-medium text-slate-700 hover:text-slate-900" href={appPath("/shift-reports/")}>
-            ← Back to Shift Reports
+            ← Back to Daily Shift Reports
           </a>
           <h2 className="mt-2 text-lg font-semibold text-slate-900">Shift report review</h2>
           <p className="text-xs text-slate-500">Report ID: {id}</p>
@@ -178,7 +178,7 @@ export function ReportDetail() {
     if (!id) {
       setLoading(false);
       setDetail(null);
-      setError("Missing report id. Open this page from the Shift Reports list, or use ?id=<report_id> in the URL.");
+      setError("Missing report id. Open this page from the Daily Shift Reports list, or use ?id=<report_id> in the URL.");
       return;
     }
 
