@@ -11,7 +11,8 @@ import {
   Gauge,
   History,
   Package,
-  Settings
+  Settings,
+  Warehouse
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { appPath } from "@/lib/supabase/client";
@@ -23,9 +24,10 @@ const items = [
   { href: "/shift-reports/", label: "Daily Shift Reports", icon: ClipboardList },
   { href: "/imports/", label: "Excel Import", icon: FileInput },
   { href: "/expenses/", label: "Expenses", icon: ReceiptText },
+  { href: "/inventory/bodega/", label: "Bodega Inventory", icon: Warehouse },
+  { href: "/inventory/lubricants/", label: "Station Lubricants", icon: Package },
+  { href: "/inventory/fuel/", label: "Fuel Inventory", icon: Fuel },
   { href: "/reports/", label: "Management Reports", icon: Database },
-  { href: "/inventory/lubricants/", label: "Lubricants", icon: Package },
-  { href: "/inventory/bodega/", label: "Bodega", icon: Package },
   { href: "/audit-logs/", label: "Audit Logs", icon: History },
   { href: "/settings/", label: "Settings", icon: Settings }
 ];

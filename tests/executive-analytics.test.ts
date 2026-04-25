@@ -53,6 +53,12 @@ describe("executive analytics", () => {
     expect(normalizeProductCode("ULG")).toBe("UNLEADED");
   });
 
+
+  it("normalizes station product code values with whitespace/case", () => {
+    expect(normalizeProductCode("  diesel  ")).toBe("DIESEL");
+    expect(normalizeProductCode(" spu ")).toBe("SPECIAL");
+    expect(normalizeProductCode(" ulg ")).toBe("UNLEADED");
+  });
   it("sums gross liters and subtracts credit and calibration for net cash liters", () => {
     const analytics = buildExecutiveAnalytics({
       reports: [{ id: "r1", report_date: "2026-04-10", duty_name: "A", status: "approved", calculated_totals: {}, discrepancy_amount: 0 }],
