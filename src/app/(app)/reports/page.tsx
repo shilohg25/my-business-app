@@ -1,17 +1,15 @@
-import { Card, CardContent } from "@/components/ui/card";
+import { ReportList } from "@/components/shift-reports/report-list";
 
-export default function Page() {
+export default function ReportsPage() {
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Reports</h1>
-        <p className="text-sm text-slate-500">Daily, weekly, monthly, cashier, station, and product summaries.</p>
+        <p className="text-sm text-slate-500">
+          View committed shift reports. Summary exports will be added after report details are stabilized.
+        </p>
       </div>
-      <Card>
-        <CardContent>
-          <p className="text-sm text-slate-500">Module route is scaffolded. Add server data access and forms in this directory.</p>
-        </CardContent>
-      </Card>
+      <ReportList />
     </div>
   );
 }
