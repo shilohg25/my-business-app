@@ -159,16 +159,11 @@ export async function markReportStatus(
 ) {
   const supabase = requireLiveData();
 
-  const patch: Record<string, unknown> = {
-    status,
-    edit_reason: explanation || `${status} from web app`
-  };
-
-  if (status === "submitted") patch.submitted_at = new Date().toISOString();
-  if (status === "reviewed") patch.reviewed_at = new Date().toISOString();
-  if (status === "approved") patch.approved_at = new Date().toISOString();
-
-  const { error } = await supabase.from("fuel_shift_reports").update(patch).eq("id", reportId);
+  const { error } = await supabase.rpc("fuel_transition_shift_report", {
+    report_id: reportId,
+    next_status: status,
+    explanation: explanation ?? `${status} from web app`
+  });
 
   if (error) throw error;
 }
