@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { canUseLiveData } from "@/lib/data/client";
-import { getSupabaseConfigurationState } from "@/lib/supabase/client";
+import { appPath, getSupabaseConfigurationState } from "@/lib/supabase/client";
 import { createStationViaRpc, fetchStationManagementData, type StationManagementRow } from "@/lib/data/stations";
 
 export function StationsClient() {
@@ -113,7 +113,7 @@ export function StationsClient() {
         {stations.length > 0 ? (
           <div className="mt-3 overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="text-left text-slate-500"><tr><th className="py-2">Code</th><th>Name</th><th>Address</th><th>Active</th><th className="text-right">Products configured</th><th className="text-right">Pumps count</th><th className="text-right">Shift templates count</th><th>Linked inventory location</th></tr></thead>
+              <thead className="text-left text-slate-500"><tr><th className="py-2">Code</th><th>Name</th><th>Address</th><th>Active</th><th className="text-right">Products configured</th><th className="text-right">Pumps count</th><th className="text-right">Shift templates count</th><th>Linked inventory location</th><th>Fuel baseline</th><th>DSP baseline present</th><th>Action</th></tr></thead>
               <tbody>
                 {stations.map((station) => (
                   <tr className="border-t" key={station.id}>
@@ -125,6 +125,9 @@ export function StationsClient() {
                     <td className="text-right">{station.pumps_count}</td>
                     <td className="text-right">{station.shift_templates_count}</td>
                     <td>{station.inventory_location_code ?? "-"}</td>
+                    <td>{station.fuel_baseline_status}</td>
+                    <td>{station.has_diesel_baseline ? "D" : "-"}/{station.has_special_baseline ? "S" : "-"}/{station.has_unleaded_baseline ? "U" : "-"}</td>
+                    <td><a className="text-blue-700 underline" href={`${appPath("/inventory/fuel/")}?station_id=${station.id}`}>Set Fuel Opening Baseline</a></td>
                   </tr>
                 ))}
               </tbody>

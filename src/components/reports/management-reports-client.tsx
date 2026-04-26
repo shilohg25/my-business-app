@@ -8,6 +8,7 @@ import { getSupabaseConfigurationState } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/utils";
 import { formatSignedCurrency } from "@/lib/analytics/discrepancy";
 import { fetchLubricantControlData } from "@/lib/data/lubricants";
+import { fetchFuelInventoryDashboard } from "@/lib/data/fuel-inventory";
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -38,6 +39,7 @@ export function ManagementReportsClient() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<Awaited<ReturnType<typeof fetchExecutiveAnalytics>> | null>(null);
   const [lubricants, setLubricants] = useState<Awaited<ReturnType<typeof fetchLubricantControlData>> | null>(null);
+  const [fuelInventory, setFuelInventory] = useState<Awaited<ReturnType<typeof fetchFuelInventoryDashboard>> | null>(null);
 
   useEffect(() => {
     if (!liveData) {
@@ -50,11 +52,12 @@ export function ManagementReportsClient() {
     setLoading(true);
     setError(null);
 
-    Promise.all([fetchExecutiveAnalytics({ startDate, endDate }), fetchLubricantControlData({ startDate, endDate })])
-      .then(([analyticsData, lubricantData]) => {
+    Promise.all([fetchExecutiveAnalytics({ startDate, endDate }), fetchLubricantControlData({ startDate, endDate }), fetchFuelInventoryDashboard({ startDate, endDate })])
+      .then(([analyticsData, lubricantData, fuelData]) => {
         if (!active) return;
         setResult(analyticsData);
         setLubricants(lubricantData);
+        setFuelInventory(fuelData);
       })
       .catch((nextError: Error) => {
         if (!active) return;
@@ -209,6 +212,21 @@ export function ManagementReportsClient() {
               </tbody>
             </table>
           </div>
+        </CardContent>
+      </Card>
+
+      
+
+      <Card>
+        <CardHeader><CardTitle>Fuel variance by station/product</CardTitle></CardHeader>
+        <CardContent><div className="overflow-x-auto"><table className="w-full text-sm"><thead className="text-left text-slate-500"><tr><th className="py-2">Station</th><th>Product</th><th className="text-right">Delivered</th><th className="text-right">Meter out</th><th className="text-right">Expected</th><th className="text-right">Actual latest</th><th className="text-right">Variance</th><th>Baseline</th></tr></thead><tbody>{(fuelInventory?.summaryRows ?? []).map((row) => (<tr className="border-t" key={`${row.station_id}-${row.product}`}><td className="py-2">{row.station_name ?? "-"}</td><td>{row.product}</td><td className="text-right">{formatLiters(row.delivered_liters)}</td><td className="text-right">{formatLiters(row.meter_liters_out)}</td><td className="text-right">{formatLiters(row.expected_ending_liters)}</td><td className="text-right">{formatLiters(row.latest_actual_ending_liters)}</td><td className="text-right">{formatLiters(row.variance_liters)}</td><td>{row.baseline_status}</td></tr>))}</tbody></table></div></CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Fuel baseline and movement overview</CardTitle></CardHeader>
+        <CardContent className="space-y-1 text-sm">
+          <p>Stations missing baseline: <span className="font-semibold">{fuelInventory?.totals?.missingBaselineStations ?? 0}</span></p>
+          <p>Fuel deliveries vs meter liters out: <span className="font-semibold">{(fuelInventory?.deliveries.length ?? 0)} deliveries / {formatLiters(fuelInventory?.totals?.totalMeterLitersOut ?? 0)} liters out</span></p>
         </CardContent>
       </Card>
 

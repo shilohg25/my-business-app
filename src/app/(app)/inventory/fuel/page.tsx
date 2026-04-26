@@ -5,7 +5,7 @@ export default function Page() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Fuel Inventory</h1>
-        <p className="text-sm text-slate-500">Track Diesel, Special, and Unleaded deliveries, liters out, tank readings, and variances.</p>
+        <p className="text-sm text-slate-500">Station fuel stock for Diesel, Special, and Unleaded.</p>
       </div>
       <FuelInventoryClient />
     </div>
