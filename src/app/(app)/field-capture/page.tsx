@@ -51,6 +51,12 @@ export default function FieldCapturePage() {
         </p>
       </header>
 
+      <section className="rounded-2xl border bg-white p-4">
+        <h2 className="text-base font-semibold text-slate-900">Future shift selection</h2>
+        <p className="mt-1.5 text-sm text-slate-600">Cashiers will choose the active shift during field capture, such as 5am–1pm, 1pm–9pm, 9pm–5am, or a station-specific shift option.</p>
+        <p className="mt-2 text-sm text-slate-600">Shift selection belongs in Field Shift Capture. Shift templates may later be managed in Settings. No separate Shift Setup page is needed for daily operations right now.</p>
+      </section>
+
       <section className="grid gap-3">
         {sections.map((section) => (
           <article className="rounded-2xl border bg-white p-4" key={section.title}>

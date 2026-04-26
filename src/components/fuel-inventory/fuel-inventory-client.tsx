@@ -48,6 +48,7 @@ export function FuelInventoryClient() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
+  const [roleChecking, setRoleChecking] = useState(liveData);
 
   const [stationFilter, setStationFilter] = useState(initialStation);
   const [productFilter, setProductFilter] = useState("ALL");
@@ -99,6 +100,7 @@ export function FuelInventoryClient() {
     }
 
     setLoading(true);
+    setRoleChecking(true);
     setError(null);
 
     const loadRole = async () => {
@@ -109,7 +111,10 @@ export function FuelInventoryClient() {
     Promise.all([reload(), loadRole()])
       .then(([, nextRole]) => setRole(nextRole))
       .catch((nextError: Error) => setError(nextError.message))
-      .finally(() => setLoading(false));
+      .finally(() => {
+        setLoading(false);
+        setRoleChecking(false);
+      });
   }, [liveData, stationFilter, productFilter, startDate, endDate]);
 
   const baselinePanelRows = useMemo(() => {
@@ -181,6 +186,8 @@ export function FuelInventoryClient() {
       {!liveData ? <div className="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{config.reason}</div> : null}
       {error ? <div className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
       {message ? <div className="rounded border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">{message}</div> : null}
+      {roleChecking ? <div className="rounded border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">Checking role...</div> : null}
+      {!roleChecking && !role ? <div className="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">No active profile found for this login.</div> : null}
 
       <Card>
         <CardHeader><CardTitle>Filters</CardTitle></CardHeader>
