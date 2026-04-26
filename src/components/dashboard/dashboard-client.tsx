@@ -11,6 +11,7 @@ import { fetchLubricantControlData } from "@/lib/data/lubricants";
 import { fetchFuelInventoryDashboard } from "@/lib/data/fuel-inventory";
 import { fetchStationExpenses } from "@/lib/data/expenses";
 import { buildExpenseAnalytics } from "@/lib/analytics/expenses";
+import { fetchCaptureReviewQueue } from "@/lib/data/field-capture";
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -35,6 +36,8 @@ export function DashboardClient() {
   const [lubricants, setLubricants] = useState<Awaited<ReturnType<typeof fetchLubricantControlData>> | null>(null);
   const [fuelInventory, setFuelInventory] = useState<Awaited<ReturnType<typeof fetchFuelInventoryDashboard>> | null>(null);
   const [expenseRows, setExpenseRows] = useState<Awaited<ReturnType<typeof fetchStationExpenses>>["rows"]>([]);
+  const [captureReviewQueueCount, setCaptureReviewQueueCount] = useState(0);
+  const [latestCaptureReadyId, setLatestCaptureReadyId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!liveData) {
@@ -51,14 +54,17 @@ export function DashboardClient() {
       fetchExecutiveAnalytics({ startDate: startOfMonthIso(), endDate: todayIso() }),
       fetchLubricantControlData({ startDate: startOfMonthIso(), endDate: todayIso() }),
       fetchFuelInventoryDashboard(),
-      fetchStationExpenses({ startDate: startOfMonthIso(), endDate: todayIso() })
+      fetchStationExpenses({ startDate: startOfMonthIso(), endDate: todayIso() }),
+      fetchCaptureReviewQueue().catch(() => [])
     ])
-      .then(([analyticsData, lubricantData, fuelData, expenseData]) => {
+      .then(([analyticsData, lubricantData, fuelData, expenseData, reviewQueue]) => {
         if (!active) return;
         setResult(analyticsData);
         setLubricants(lubricantData);
         setFuelInventory(fuelData);
         setExpenseRows(expenseData.rows);
+        setCaptureReviewQueueCount(reviewQueue.length);
+        setLatestCaptureReadyId(reviewQueue[0]?.id ?? null);
       })
       .catch((nextError: Error) => {
         if (!active) return;
@@ -123,6 +129,8 @@ export function DashboardClient() {
         <Card><CardHeader><CardDescription>Stations missing fuel baseline</CardDescription><CardTitle>{fuelInventory?.totals?.missingBaselineStations ?? 0}</CardTitle></CardHeader></Card>
         <Card><CardHeader><CardDescription>Fuel shortage alerts</CardDescription><CardTitle>{fuelInventory?.totals?.shortageAlerts ?? 0}</CardTitle></CardHeader></Card>
         <Card><CardHeader><CardDescription>Fuel inventory</CardDescription><CardTitle><a className="underline" href={appPath("/inventory/fuel/")}>Open Fuel Inventory</a></CardTitle></CardHeader></Card>
+        <Card><CardHeader><CardDescription>Field Capture Review Queue</CardDescription><CardTitle>{captureReviewQueueCount}</CardTitle></CardHeader><CardContent className="pt-0 text-xs text-slate-500">{latestCaptureReadyId ? <a className="underline" href={appPath(`/field-capture/review/?id=${latestCaptureReadyId}`)}>Open latest ready draft</a> : <a className="underline" href={appPath("/field-capture/")}>Open Field Capture</a>}</CardContent></Card>
+
       </div>
 
       {loading ? <p className="text-sm text-slate-500">Loading executive snapshot...</p> : null}
