@@ -6,6 +6,7 @@ import { canUseLiveData, fetchShiftReportDetail, markReportStatus, type ShiftRep
 import { appPath, getSupabaseConfigurationState } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/utils";
 import { formatSignedCurrency, getDiscrepancyLabel } from "@/lib/analytics/discrepancy";
+import { getShiftReportSourceLabel } from "@/lib/domain/source-labels";
 
 function formatNumber(value: number | string | null | undefined, digits = 2) {
   const numeric = Number(value ?? Number.NaN);
@@ -184,7 +185,7 @@ function ReviewHeader({ detail, id }: { detail: ShiftReportDetail; id: string })
         <p><span className="text-slate-500">Shift time:</span> {detail.report.shift_time_label || "-"}</p>
         <p><span className="text-slate-500">Duty/Cashier:</span> {detail.report.duty_name || "-"}</p>
         <p><span className="text-slate-500">Station:</span> {detail.report.fuel_stations?.name ?? "-"}</p>
-        <p><span className="text-slate-500">Source:</span> {detail.report.source || "-"}</p>
+        <p><span className="text-slate-500">Source:</span> {getShiftReportSourceLabel(detail.report.source)}</p>
         <p><span className="text-slate-500">Created:</span> {formatDateTime(detail.report.created_at)}</p>
       </div>
     </section>
@@ -236,7 +237,7 @@ function ReviewActionCard({ report, onActionSuccess, onActionError }: ReviewActi
         <h2 className="text-base font-semibold text-slate-900">Review actions</h2>
         <p className="mt-1 text-xs text-slate-500">
           Use Mark Reviewed after checking entries. Use Approve only when the report is final. Use Flag for Correction when the
-          report needs edits or re-import.
+          report needs edits and resubmission.
         </p>
       </div>
 

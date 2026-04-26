@@ -8,6 +8,7 @@ import { canUseLiveData, listShiftReports, markReportStatus, type ShiftReportRow
 import { appPath, getSupabaseConfigurationState } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/utils";
 import { formatSignedCurrency, getDiscrepancyLabel, getDiscrepancyStatus } from "@/lib/analytics/discrepancy";
+import { getShiftReportSourceLabel } from "@/lib/domain/source-labels";
 
 type ReportStatusFilter = "all" | "draft" | "submitted" | "reviewed" | "approved";
 
@@ -132,7 +133,7 @@ export function ReportList() {
 
       {!loading && reports.length === 0 ? (
         <p className="text-sm text-slate-500">
-          {liveData ? "No reports found. Create one manually or import an Excel workbook." : "No live report data is available in setup mode."}
+          {liveData ? "No reports found. Create one manually or use future mobile shift submission when available." : "No live report data is available in setup mode."}
         </p>
       ) : null}
 
@@ -178,7 +179,7 @@ export function ReportList() {
                         <Badge className={getDiscrepancyStatus(discrepancyAmount).tone === "positive" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : getDiscrepancyStatus(discrepancyAmount).tone === "negative" ? "border-red-200 bg-red-50 text-red-700" : "border-slate-200 bg-slate-50 text-slate-700"}>{getDiscrepancyLabel(discrepancyAmount)}</Badge>
                       </div>
                     </td>
-                    <td>{report.source || "-"}</td>
+                    <td>{getShiftReportSourceLabel(report.source)}</td>
                     <td className="text-right">{cashCount === null ? "-" : formatCurrency(cashCount)}</td>
                     <td className="text-right">{netRemittance === null ? "-" : formatCurrency(netRemittance)}</td>
                     <td className="text-right">{formatSignedCurrency(discrepancyAmount)}</td>
