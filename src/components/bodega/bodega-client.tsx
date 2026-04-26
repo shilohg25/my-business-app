@@ -6,8 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { canUseLiveData } from "@/lib/data/client";
-import { createBodegaViaRpc, fetchBodegaData } from "@/lib/data/bodega";
+import { createBodega, fetchBodegaData } from "@/lib/data/bodega";
 import { createSupabaseBrowserClient, getSupabaseConfigurationState } from "@/lib/supabase/client";
+import { fetchCurrentProfile } from "@/lib/data/profile";
 
 function asNumber(value: unknown) {
   const parsed = Number(value ?? Number.NaN);
@@ -27,6 +28,8 @@ export function BodegaClient() {
   const [result, setResult] = useState<Awaited<ReturnType<typeof fetchBodegaData>> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [isOwner, setIsOwner] = useState(false);
+  const [roleChecking, setRoleChecking] = useState(liveData);
 
   const [bodegaCode, setBodegaCode] = useState("");
   const [bodegaName, setBodegaName] = useState("");
@@ -47,7 +50,9 @@ export function BodegaClient() {
 
   const reload = async () => {
     if (!liveData) return;
-    const data = await fetchBodegaData();
+    const [data, profile] = await Promise.all([fetchBodegaData(), fetchCurrentProfile()]);
+    setIsOwner(profile?.role === "Owner");
+    setRoleChecking(false);
     setResult(data);
     if (!selectedBodegaId && data.locations[0]) setSelectedBodegaId(data.locations[0].id);
     if (!toStationLocationId && data.stations[0]) setToStationLocationId(data.stations[0].id);
@@ -65,7 +70,7 @@ export function BodegaClient() {
   async function submitCreateBodega(e: React.FormEvent) {
     e.preventDefault();
     try {
-      await createBodegaViaRpc({ code: bodegaCode, name: bodegaName, address: bodegaAddress, notes: bodegaNotes });
+      await createBodega({ code: bodegaCode, name: bodegaName, address: bodegaAddress, notes: bodegaNotes });
       setMessage("Bodega created");
       setBodegaCode(""); setBodegaName(""); setBodegaAddress(""); setBodegaNotes("");
       await reload();
@@ -129,13 +134,13 @@ export function BodegaClient() {
     {error ? <div className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
     {message ? <div className="rounded border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">{message}</div> : null}
 
-    <Card><CardHeader><CardTitle>Add bodega</CardTitle></CardHeader><CardContent>
+    <Card><CardHeader><CardTitle>Add bodega</CardTitle></CardHeader><CardContent>{roleChecking ? <p className="mb-2 text-sm text-slate-500">Checking role...</p> : null}{!isOwner && !roleChecking ? <p className="mb-2 text-sm text-amber-700">Only Owner profiles can create bodegas.</p> : null}
       <form className="space-y-2" onSubmit={submitCreateBodega}>
         <Input placeholder="Code" value={bodegaCode} onChange={(e) => setBodegaCode(e.target.value)} required />
         <Input placeholder="Name" value={bodegaName} onChange={(e) => setBodegaName(e.target.value)} required />
         <Input placeholder="Address" value={bodegaAddress} onChange={(e) => setBodegaAddress(e.target.value)} />
         <Textarea placeholder="Notes" value={bodegaNotes} onChange={(e) => setBodegaNotes(e.target.value)} />
-        <Button type="submit">Create bodega</Button>
+        <Button type="submit" disabled={!isOwner}>{isOwner ? "Create bodega" : "Create bodega"}</Button>
       </form>
     </CardContent></Card>
 

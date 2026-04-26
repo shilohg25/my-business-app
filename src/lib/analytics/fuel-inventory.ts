@@ -32,7 +32,7 @@ export function normalizeFuelProductCode(code: string | null | undefined): FuelP
   const normalized = (code ?? "").trim().toUpperCase();
   if (normalized === "ADO" || normalized === "DIESEL") return "DIESEL";
   if (normalized === "SPU" || normalized === "SPECIAL") return "SPECIAL";
-  if (normalized === "ULG" || normalized === "UNLEADED") return "UNLEADED";
+  if (normalized === "ULG" || normalized === "UNLEADED" || normalized === "REGULAR") return "UNLEADED";
   return "OTHER";
 }
 
