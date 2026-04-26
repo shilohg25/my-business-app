@@ -2,20 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ResetFiltersButton } from "@/components/ui/reset-filters-button";
 import { buildExpenseAnalytics } from "@/lib/analytics/expenses";
 import { canUseLiveData } from "@/lib/data/client";
 import { fetchStationExpenses, type ExpenseStationOption } from "@/lib/data/expenses";
 import { appPath, getSupabaseConfigurationState } from "@/lib/supabase/client";
+import { areFiltersDefault, getCurrentMonthDateRange } from "@/lib/utils/filters";
 import { formatCurrency } from "@/lib/utils";
-
-function todayIso() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function startOfMonthIso() {
-  const now = new Date();
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString().slice(0, 10);
-}
 
 function daysAgoIso(days: number) {
   const now = new Date();
@@ -41,9 +34,11 @@ export function ExpensesClient() {
   const liveData = canUseLiveData();
   const config = getSupabaseConfigurationState();
 
+  const monthDateRange = getCurrentMonthDateRange();
+  const defaultFilters = { stationId: "all", startDate: monthDateRange.startDate, endDate: monthDateRange.endDate };
   const [stationId, setStationId] = useState("all");
-  const [startDate, setStartDate] = useState(startOfMonthIso());
-  const [endDate, setEndDate] = useState(todayIso());
+  const [startDate, setStartDate] = useState(defaultFilters.startDate);
+  const [endDate, setEndDate] = useState(defaultFilters.endDate);
   const [loading, setLoading] = useState(liveData);
   const [error, setError] = useState<string | null>(null);
   const [rows, setRows] = useState<Awaited<ReturnType<typeof fetchStationExpenses>>["rows"]>([]);
@@ -89,21 +84,31 @@ export function ExpensesClient() {
   const isAllStations = stationId === "all";
   const selectedStation = stations.find((station) => station.id === stationId) ?? null;
 
+  function resetFilters() {
+    const nextDefaults = getCurrentMonthDateRange();
+    setStationId("all");
+    setStartDate(nextDefaults.startDate);
+    setEndDate(nextDefaults.endDate);
+  }
+
+  const hasActiveFilters = !areFiltersDefault({ stationId, startDate, endDate }, defaultFilters);
+
   const setPreset = (preset: "today" | "month" | "last30") => {
     if (preset === "today") {
-      const date = todayIso();
+      const date = new Date().toISOString().slice(0, 10);
       setStartDate(date);
       setEndDate(date);
       return;
     }
     if (preset === "month") {
-      setStartDate(startOfMonthIso());
-      setEndDate(todayIso());
+      const monthDefaults = getCurrentMonthDateRange();
+      setStartDate(monthDefaults.startDate);
+      setEndDate(monthDefaults.endDate);
       return;
     }
 
     setStartDate(daysAgoIso(29));
-    setEndDate(todayIso());
+    setEndDate(new Date().toISOString().slice(0, 10));
   };
 
   const hasRows = analytics.expenseCount > 0;
@@ -146,6 +151,9 @@ export function ExpensesClient() {
             <label className="text-xs font-medium text-slate-600">Custom end date
               <input className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
             </label>
+          </div>
+          <div className="flex justify-end">
+            <ResetFiltersButton onClick={resetFilters} visible={hasActiveFilters} />
           </div>
         </CardContent>
       </Card>

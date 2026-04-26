@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ResetFiltersButton } from "@/components/ui/reset-filters-button";
 import { canUseLiveData } from "@/lib/data/client";
 import { fetchExecutiveAnalytics } from "@/lib/data/executive";
 import { getSupabaseConfigurationState } from "@/lib/supabase/client";
@@ -11,15 +12,7 @@ import { fetchLubricantControlData } from "@/lib/data/lubricants";
 import { fetchFuelInventoryDashboard } from "@/lib/data/fuel-inventory";
 import { fetchStationExpenses } from "@/lib/data/expenses";
 import { buildExpenseAnalytics } from "@/lib/analytics/expenses";
-
-function todayIso() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function startOfMonthIso() {
-  const now = new Date();
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString().slice(0, 10);
-}
+import { areFiltersDefault, getCurrentMonthDateRange } from "@/lib/utils/filters";
 
 function formatLiters(value: number) {
   return value.toLocaleString("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3, useGrouping: false });
@@ -34,9 +27,11 @@ function formatDay(value: string) {
 export function ManagementReportsClient() {
   const liveData = canUseLiveData();
   const config = getSupabaseConfigurationState();
+  const monthDateRange = getCurrentMonthDateRange();
+  const defaultFilters = { startDate: monthDateRange.startDate, endDate: monthDateRange.endDate };
 
-  const [startDate, setStartDate] = useState(startOfMonthIso());
-  const [endDate, setEndDate] = useState(todayIso());
+  const [startDate, setStartDate] = useState(defaultFilters.startDate);
+  const [endDate, setEndDate] = useState(defaultFilters.endDate);
   const [loading, setLoading] = useState(liveData);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<Awaited<ReturnType<typeof fetchExecutiveAnalytics>> | null>(null);
@@ -91,6 +86,12 @@ export function ManagementReportsClient() {
 
   const totals = result?.analytics.totals;
   const expenseAnalytics = useMemo(() => buildExpenseAnalytics(expenseRows), [expenseRows]);
+  const hasActiveFilters = !areFiltersDefault({ startDate, endDate }, defaultFilters);
+  function resetFilters() {
+    const nextDefaults = getCurrentMonthDateRange();
+    setStartDate(nextDefaults.startDate);
+    setEndDate(nextDefaults.endDate);
+  }
 
   return (
     <div className="space-y-6">
@@ -107,13 +108,18 @@ export function ManagementReportsClient() {
           <CardTitle>Date range</CardTitle>
           <CardDescription>Default is this month using report date business periods.</CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-3 sm:grid-cols-2">
+        <CardContent className="space-y-3">
+          <div className="grid gap-3 sm:grid-cols-2">
           <label className="text-xs font-medium text-slate-600">Start date
             <input className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
           </label>
           <label className="text-xs font-medium text-slate-600">End date
             <input className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
           </label>
+          </div>
+          <div className="flex justify-end">
+            <ResetFiltersButton onClick={resetFilters} visible={hasActiveFilters} />
+          </div>
         </CardContent>
       </Card>
 

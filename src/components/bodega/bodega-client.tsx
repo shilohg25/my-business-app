@@ -4,12 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { ResetFiltersButton } from "@/components/ui/reset-filters-button";
 import { SimpleModal } from "@/components/ui/simple-modal";
 import { Textarea } from "@/components/ui/textarea";
 import { createBodega, fetchBodegaData } from "@/lib/data/bodega";
 import { canUseLiveData } from "@/lib/data/client";
 import { fetchCurrentProfile } from "@/lib/data/profile";
 import { createSupabaseBrowserClient, getSupabaseConfigurationState } from "@/lib/supabase/client";
+import { areFiltersDefault } from "@/lib/utils/filters";
 import { getErrorMessage, isBlank } from "@/lib/utils/forms";
 
 function asNumber(value: unknown) {
@@ -45,6 +47,8 @@ export function BodegaClient() {
   const [createError, setCreateError] = useState<string | null>(null);
 
   const [selectedBodegaId, setSelectedBodegaId] = useState("");
+  const [inventorySearch, setInventorySearch] = useState("");
+  const [inventoryStatus, setInventoryStatus] = useState("all");
 
   const [receiveModalOpen, setReceiveModalOpen] = useState(false);
   const [receiveSaving, setReceiveSaving] = useState(false);
@@ -82,10 +86,26 @@ export function BodegaClient() {
     reload().catch((err) => setError(getErrorMessage(err)));
   }, [liveData]);
 
-  const filteredInventory = useMemo(
-    () => (result?.inventory ?? []).filter((row) => !selectedBodegaId || row.location_id === selectedBodegaId),
-    [result?.inventory, selectedBodegaId]
-  );
+  const defaultFilters = { selectedBodegaId: "", inventorySearch: "", inventoryStatus: "all" };
+  const filteredInventory = useMemo(() => {
+    const normalizedSearch = inventorySearch.trim().toLowerCase();
+    return (result?.inventory ?? []).filter((row) => {
+      if (selectedBodegaId && row.location_id !== selectedBodegaId) return false;
+      const isLowStock = asNumber(row.quantity_on_hand) <= asNumber(row.reorder_level);
+      if (inventoryStatus === "low" && !isLowStock) return false;
+      if (inventoryStatus === "ok" && isLowStock) return false;
+      if (!normalizedSearch) return true;
+      const haystack = `${row.product_name ?? ""} ${row.sku ?? ""}`.toLowerCase();
+      return haystack.includes(normalizedSearch);
+    });
+  }, [inventorySearch, inventoryStatus, result?.inventory, selectedBodegaId]);
+  const hasActiveFilters = !areFiltersDefault({ selectedBodegaId, inventorySearch, inventoryStatus }, defaultFilters);
+
+  function resetFilters() {
+    setSelectedBodegaId("");
+    setInventorySearch("");
+    setInventoryStatus("all");
+  }
 
   const bodegaSummaries = useMemo(() => {
     const rows = result?.inventory ?? [];
@@ -559,14 +579,23 @@ export function BodegaClient() {
           <CardTitle>Bodega inventory</CardTitle>
         </CardHeader>
         <CardContent>
-          <select className="mb-3 w-full rounded-md border px-3 py-2 text-sm" value={selectedBodegaId} onChange={(event) => setSelectedBodegaId(event.target.value)}>
-            <option value="">All bodegas</option>
-            {bodegas.map((bodega) => (
-              <option key={bodega.id} value={bodega.id}>
-                {bodega.name}
-              </option>
-            ))}
-          </select>
+          <div className="mb-3 flex flex-wrap items-end gap-2">
+            <select className="w-full rounded-md border px-3 py-2 text-sm sm:w-auto" value={selectedBodegaId} onChange={(event) => setSelectedBodegaId(event.target.value)}>
+              <option value="">All bodegas</option>
+              {bodegas.map((bodega) => (
+                <option key={bodega.id} value={bodega.id}>
+                  {bodega.name}
+                </option>
+              ))}
+            </select>
+            <Input className="w-full sm:w-52" placeholder="Search product or SKU" value={inventorySearch} onChange={(event) => setInventorySearch(event.target.value)} />
+            <select className="w-full rounded-md border px-3 py-2 text-sm sm:w-auto" value={inventoryStatus} onChange={(event) => setInventoryStatus(event.target.value)}>
+              <option value="all">All statuses</option>
+              <option value="low">Low stock</option>
+              <option value="ok">OK</option>
+            </select>
+            <ResetFiltersButton className="ml-auto" onClick={resetFilters} visible={hasActiveFilters} />
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>

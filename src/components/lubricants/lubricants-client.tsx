@@ -3,19 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { ResetFiltersButton } from "@/components/ui/reset-filters-button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { canUseLiveData } from "@/lib/data/client";
 import { fetchLubricantControlData } from "@/lib/data/lubricants";
 import { getSupabaseConfigurationState } from "@/lib/supabase/client";
-
-function todayIso() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function startOfMonthIso() {
-  const now = new Date();
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString().slice(0, 10);
-}
+import { areFiltersDefault, getCurrentMonthDateRange } from "@/lib/utils/filters";
 
 function asNumber(value: number | string | null | undefined) {
   const parsed = Number(value ?? Number.NaN);
@@ -222,14 +216,26 @@ function ReconciliationWarningsCard({ warnings }: { warnings: string[] }) {
 export function LubricantsClient() {
   const liveData = canUseLiveData();
   const config = getSupabaseConfigurationState();
+  const monthDateRange = getCurrentMonthDateRange();
+  const defaultFilters = { stationFilter: "all", startDate: monthDateRange.startDate, endDate: monthDateRange.endDate };
   const [result, setResult] = useState<LubricantsData | null>(null);
-  const [stationFilter, setStationFilter] = useState("all");
+  const [stationFilter, setStationFilter] = useState(defaultFilters.stationFilter);
+  const [startDate, setStartDate] = useState(defaultFilters.startDate);
+  const [endDate, setEndDate] = useState(defaultFilters.endDate);
 
   useEffect(() => {
-    fetchLubricantControlData({ startDate: startOfMonthIso(), endDate: todayIso() })
+    fetchLubricantControlData({ startDate, endDate })
       .then(setResult)
       .catch(() => setResult(null));
-  }, [liveData]);
+  }, [endDate, liveData, startDate]);
+  const hasActiveFilters = !areFiltersDefault({ stationFilter, startDate, endDate }, defaultFilters);
+
+  function resetFilters() {
+    const nextDefaults = getCurrentMonthDateRange();
+    setStationFilter("all");
+    setStartDate(nextDefaults.startDate);
+    setEndDate(nextDefaults.endDate);
+  }
 
   const filteredStationInventory = useMemo(
     () => (result?.stationInventory ?? []).filter((row) => stationFilter === "all" || row.station_id === stationFilter),
@@ -260,22 +266,22 @@ export function LubricantsClient() {
           <CardTitle>Filter</CardTitle>
         </CardHeader>
         <CardContent>
-          <label className="mb-2 block text-sm font-medium text-slate-700" htmlFor="station-filter">
-            Station
-          </label>
-          <select
-            id="station-filter"
-            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
-            value={stationFilter}
-            onChange={(e) => setStationFilter(e.target.value)}
-          >
-            <option value="all">All stations</option>
-            {(result?.stations ?? []).map((station) => (
-              <option key={station.id} value={station.id}>
-                {station.name}
-              </option>
-            ))}
-          </select>
+          <div className="flex flex-wrap items-end gap-2">
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-700" htmlFor="station-filter">Station</label>
+              <select id="station-filter" className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" value={stationFilter} onChange={(e) => setStationFilter(e.target.value)}>
+                <option value="all">All stations</option>
+                {(result?.stations ?? []).map((station) => (
+                  <option key={station.id} value={station.id}>
+                    {station.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+            <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+            <ResetFiltersButton className="ml-auto" onClick={resetFilters} visible={hasActiveFilters} />
+          </div>
         </CardContent>
       </Card>
 
