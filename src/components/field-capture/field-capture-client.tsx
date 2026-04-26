@@ -8,6 +8,7 @@ import {
   fetchCaptureSessionById,
   fetchMyDraftCaptureSessions,
   getFieldCaptureReviewUrl,
+  getPublishedShiftReportUrl,
   markShiftCaptureReady,
   startShiftCaptureSession,
   updateShiftCaptureDraft,
@@ -237,9 +238,9 @@ export default function FieldCaptureClient() {
     </section>
 
     {activeSession ? <>
-      <section className="rounded-2xl border bg-white p-4 text-sm"><p>Status: {activeSession.status}</p>{!isEditable ? <p className="text-amber-700">This session is read-only.</p> : null}</section>
+      <section className="rounded-2xl border bg-white p-4 text-sm"><p>Status: {activeSession.status}</p>{!isEditable ? <p className="text-amber-700">This session is read-only.</p> : null}{activeSession.status === "published" && activeSession.published_shift_report_id ? <p><a className="underline" href={getPublishedShiftReportUrl(activeSession.published_shift_report_id)}>View final report</a></p> : null}</section>
 
-      {[{ title: "Meter", rows: meterReadings, setRows: setMeterReadings, empty: emptyMeterRow, fields: ["pump_label", "product", "opening_reading", "closing_reading", "calibration_liters"] },
+      {isEditable ? <>{[{ title: "Meter", rows: meterReadings, setRows: setMeterReadings, empty: emptyMeterRow, fields: ["pump_label", "product", "opening_reading", "closing_reading", "calibration_liters"] },
       { title: "Cash count", rows: cashCount, setRows: setCashCount, empty: emptyCashRow, fields: ["denomination", "quantity"] },
       { title: "Expenses", rows: expenses, setRows: setExpenses, empty: emptyExpenseRow, fields: ["category", "description", "amount", "receipt_reference"] },
       { title: "Credit receipts", rows: creditReceipts, setRows: setCreditReceipts, empty: emptyCreditRow, fields: ["company_customer", "receipt_number", "product", "liters", "amount"] },
@@ -280,6 +281,10 @@ export default function FieldCaptureClient() {
       <section className="rounded-2xl border bg-white p-4 space-y-2"><button type="button" disabled={loading || !isEditable} className="min-h-11 w-full rounded-xl bg-slate-900 text-white" onClick={() => void saveDraft()}>Save draft</button>
         <button type="button" disabled={loading || !activeSession} className="min-h-11 w-full rounded-xl bg-emerald-700 text-white disabled:opacity-60" onClick={() => void markReady()}>Mark ready for review</button>
       </section>
+      </> : <section className="rounded-2xl border bg-white p-4 text-sm">
+        <p>Draft editing is unavailable once a session is marked ready, published, or voided.</p>
+        {activeSession.status === "published" && activeSession.published_shift_report_id ? <p><a className="underline" href={getPublishedShiftReportUrl(activeSession.published_shift_report_id)}>Open final shift report</a></p> : null}
+      </section>}
     </> : null}
 
     {loading ? <p className="text-sm text-slate-500">Loading...</p> : null}
