@@ -3,10 +3,13 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { buildFieldCaptureReviewSummary } from "@/lib/analytics/field-capture";
+import { fetchCurrentProfile } from "@/lib/data/profile";
 import {
   fetchCaptureSessionForReview,
   fetchCaptureSessionPhotos,
   getFieldCaptureReviewUrl,
+  getPublishedShiftReportUrl,
+  publishShiftCaptureSession,
   type FuelShiftCaptureSessionRow
 } from "@/lib/data/field-capture";
 import type { FuelShiftCapturePhotoRow } from "@/lib/data/field-capture-photos";
@@ -16,16 +19,26 @@ function ReviewInner() {
   const id = params.get("id") ?? "";
   const [session, setSession] = useState<FuelShiftCaptureSessionRow | null>(null);
   const [photos, setPhotos] = useState<FuelShiftCapturePhotoRow[]>([]);
+  const [role, setRole] = useState<string | null>(null);
+  const [publishing, setPublishing] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const loadReviewData = async () => {
+    if (!id) return;
+    const [sessionRow, photoRows, profile] = await Promise.all([
+      fetchCaptureSessionForReview(id),
+      fetchCaptureSessionPhotos(id),
+      fetchCurrentProfile()
+    ]);
+    setSession(sessionRow);
+    setPhotos(photoRows);
+    setRole(profile?.role ?? null);
+  };
 
   useEffect(() => {
     if (!id) return;
-    Promise.all([fetchCaptureSessionForReview(id), fetchCaptureSessionPhotos(id)])
-      .then(([sessionRow, photoRows]) => {
-        setSession(sessionRow);
-        setPhotos(photoRows);
-      })
-      .catch((err: Error) => setError(err.message));
+    loadReviewData().catch((err: Error) => setError(err.message));
   }, [id]);
 
   const summary = useMemo(() => {
@@ -35,11 +48,34 @@ function ReviewInner() {
     return built;
   }, [session?.draft_payload, photos.length]);
 
+  const isOwnerAdmin = role === "Owner" || role === "Admin" || role === "Co-Owner";
+  const canPublish = isOwnerAdmin && session?.status === "ready_for_review";
+
+  const handlePublish = async () => {
+    if (!session || !canPublish) return;
+    const confirmed = window.confirm("Publish this field capture as an official shift report?");
+    if (!confirmed) return;
+
+    setPublishing(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const shiftReportId = await publishShiftCaptureSession(session.id);
+      setMessage(`Published official shift report. ${getPublishedShiftReportUrl(shiftReportId)}`);
+      await loadReviewData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to publish field capture session.");
+    } finally {
+      setPublishing(false);
+    }
+  };
+
   if (!id) return <div className="rounded border p-3 text-sm">Missing capture session id. Use <code>?id=&lt;capture_session_id&gt;</code>.</div>;
   if (error) return <div className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>;
   if (!session) return <p className="text-sm text-slate-500">Loading capture session...</p>;
 
   return <div className="space-y-4 text-sm">
+    {message ? <div className="rounded border border-emerald-200 bg-emerald-50 p-3 text-emerald-700">{message}</div> : null}
     <section className="rounded border bg-white p-3">
       <p>Status: {session.status}</p>
       <p>Station: {session.fuel_stations?.name ?? session.station_id}</p>
@@ -66,25 +102,20 @@ function ReviewInner() {
     </section>
 
     <section className="rounded border bg-white p-3"><p className="font-semibold">Meter readings</p><pre>{JSON.stringify((session.draft_payload?.meter_readings ?? []), null, 2)}</pre></section>
-    <section className="rounded border bg-white p-3"><p className="font-semibold">Cash count</p><pre>{JSON.stringify((session.draft_payload?.cash_count ?? []), null, 2)}</pre></section>
-    <section className="rounded border bg-white p-3"><p className="font-semibold">Credit/invoice receipts</p><pre>{JSON.stringify((session.draft_payload?.credit_receipts ?? []), null, 2)}</pre></section>
-    <section className="rounded border bg-white p-3"><p className="font-semibold">Expenses</p><pre>{JSON.stringify((session.draft_payload?.expenses ?? []), null, 2)}</pre></section>
-    <section className="rounded border bg-white p-3"><p className="font-semibold">Lubricant sales</p><pre>{JSON.stringify((session.draft_payload?.lubricant_sales ?? []), null, 2)}</pre></section>
-    <section className="rounded border bg-white p-3"><p className="font-semibold">Fuel deliveries</p><pre>{JSON.stringify((session.draft_payload?.fuel_deliveries ?? []), null, 2)}</pre></section>
-
-    <section className="rounded border bg-white p-3"><p className="font-semibold">Photo evidence</p>
-      {photos.length === 0 ? <p>No photos uploaded.</p> : photos.map((photo) => <div key={photo.id} className="rounded border p-2 mb-2">
-        <p>File name: {photo.original_file_name ?? "Unnamed file"}</p>
-        <p>Photo type: {photo.photo_type}</p>
-        <p>OCR status: {photo.ocr_status}</p>
-        <p>Uploaded date: {new Date(photo.created_at).toLocaleString()}</p>
-      </div>)}
-    </section>
 
     <section className="rounded border bg-white p-3 space-y-2"><p className="font-semibold">Review actions</p>
       {session.status === "draft" ? <p>Still in draft.</p> : null}
-      {session.status === "ready_for_review" ? <><p>Owner/Admin review area.</p><button disabled className="rounded border px-3 py-2 opacity-60">Publish final report</button><p>Publishing final reports is not enabled yet.</p></> : null}
-      {session.status === "published" ? <p>Published. {session.published_shift_report_id ? `Final report: ${session.published_shift_report_id}` : "Final report id not available."}</p> : null}
+      {session.status === "ready_for_review" ? <>
+        {!isOwnerAdmin ? <p>Only Owner/Admin can publish final shift reports.</p> : null}
+        <button
+          disabled={publishing || !canPublish}
+          onClick={() => void handlePublish()}
+          className="rounded border px-3 py-2 disabled:opacity-60"
+        >
+          {publishing ? "Publishing..." : "Publish final report"}
+        </button>
+      </> : null}
+      {session.status === "published" ? <p>Published. {session.published_shift_report_id ? <a className="underline" href={getPublishedShiftReportUrl(session.published_shift_report_id)}>View final report</a> : "Final report id not available."}</p> : null}
       {session.status === "voided" ? <p>Void reason: {session.void_reason ?? "No reason provided."}</p> : null}
       <a className="underline" href={getFieldCaptureReviewUrl(session.id)}>Permalink</a>
     </section>

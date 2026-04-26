@@ -130,6 +130,19 @@ export async function fetchCaptureSessionPhotos(id: string) {
   return (data ?? []) as FuelShiftCapturePhotoRow[];
 }
 
+
+export async function publishShiftCaptureSession(captureSessionId: string) {
+  const supabase = requireSupabase();
+  const { data, error } = await supabase.rpc("fuel_publish_shift_capture_session", {
+    capture_session_id: captureSessionId
+  });
+  if (error) throw getRpcError("Unable to publish field capture session", error);
+  return data as string;
+}
+
+export function getPublishedShiftReportUrl(id: string) {
+  return appPath(`/shift-reports/view/?id=${id}`);
+}
 export function getFieldCaptureReviewUrl(id: string) {
   return appPath(`/field-capture/review/?id=${id}`);
 }

@@ -30,9 +30,11 @@ export function toNumber(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function normalizeProduct(product: unknown): "DIESEL" | "SPECIAL" | "UNLEADED" | "OTHER" {
+export function normalizeFieldCaptureProductCode(product: unknown): "DIESEL" | "SPECIAL" | "UNLEADED" | "OTHER" {
   const text = String(product ?? "").trim().toUpperCase();
-  if (text === "DIESEL" || text === "SPECIAL" || text === "UNLEADED") return text;
+  if (text === "ADO" || text === "DIESEL") return "DIESEL";
+  if (text === "SPU" || text === "SPECIAL") return "SPECIAL";
+  if (text === "ULG" || text === "UNLEADED" || text === "REGULAR") return "UNLEADED";
   return "OTHER";
 }
 
@@ -64,7 +66,7 @@ export function calculateDraftMeterRows(meterRows: DraftRow[] = []) {
       warnings.push(`Negative liters out on row ${index + 1}.`);
     }
 
-    const product = normalizeProduct(row.product);
+    const product = normalizeFieldCaptureProductCode(row.product_code ?? row.product);
     const grossLitersOut = Math.max(0, closing - opening);
     const netLitersOut = Math.max(0, litersOut);
     byProduct[product].grossLitersOut += grossLitersOut;
