@@ -1,6 +1,7 @@
 "use client";
 
 import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -17,24 +18,36 @@ import {
 } from "@/lib/data/fuel-inventory";
 import { fetchCurrentProfile } from "@/lib/data/profile";
 import { getSupabaseConfigurationState } from "@/lib/supabase/client";
+import { formatLiters, formatVariance } from "@/lib/utils/format";
 import { areFiltersDefault, getCurrentMonthDateRange } from "@/lib/utils/filters";
+
+const fuelProducts = ["DIESEL", "SPECIAL", "UNLEADED"] as const;
+type FuelProduct = (typeof fuelProducts)[number];
 
 function toNum(value: string) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function fuelVarianceLabel(value: number) {
+function fuelVarianceLabel(value: number, baselineStatus: string) {
+  if (baselineStatus === "missing") return "Missing baseline";
   if (Math.abs(value) <= 0.001) return "Balanced";
   if (value > 0) return "Fuel over";
   return "Fuel shortage";
 }
 
-const fuelProductOrder = new Map([
-  ["DIESEL", 0],
-  ["SPECIAL", 1],
-  ["UNLEADED", 2]
-]);
+function statusBadgeClass(status: string) {
+  if (status === "Fuel shortage") return "border-amber-200 bg-amber-50 text-amber-800";
+  if (status === "Fuel over") return "border-blue-200 bg-blue-50 text-blue-800";
+  if (status === "Missing baseline") return "border-slate-300 bg-slate-100 text-slate-700";
+  return "border-emerald-200 bg-emerald-50 text-emerald-700";
+}
+
+function stationAggregateStatus(variance: number, hasMissingBaseline: boolean) {
+  if (hasMissingBaseline) return "Missing baseline";
+  if (Math.abs(variance) <= 0.001) return "Balanced";
+  return variance > 0 ? "Fuel over" : "Fuel shortage";
+}
 
 export function FuelInventoryClient() {
   const liveData = canUseLiveData();
@@ -171,29 +184,27 @@ export function FuelInventoryClient() {
   }, [result]);
 
   const groupedSummaryRows = useMemo(() => {
-    const rows = [...(result?.summaryRows ?? [])].sort((a, b) => {
-      const stationCompare = (a.station_name ?? "").localeCompare(b.station_name ?? "");
-      if (stationCompare !== 0) return stationCompare;
-      return (fuelProductOrder.get(a.product) ?? 99) - (fuelProductOrder.get(b.product) ?? 99);
-    });
-
+    const rows = result?.summaryRows ?? [];
     const grouped = new Map<string, { stationId: string; stationName: string; rows: typeof rows }>();
     rows.forEach((row) => {
-      const key = row.station_id;
-      const existing = grouped.get(key);
+      const existing = grouped.get(row.station_id);
       if (existing) {
         existing.rows.push(row);
         return;
       }
-
-      grouped.set(key, {
+      grouped.set(row.station_id, {
         stationId: row.station_id,
         stationName: row.station_name ?? "Unknown station",
         rows: [row]
       });
     });
 
-    return Array.from(grouped.values());
+    return Array.from(grouped.values())
+      .map((group) => ({
+        ...group,
+        rows: [...group.rows].sort((a, b) => fuelProducts.indexOf(a.product as FuelProduct) - fuelProducts.indexOf(b.product as FuelProduct))
+      }))
+      .sort((a, b) => a.stationName.localeCompare(b.stationName));
   }, [result?.summaryRows]);
 
   async function handleSaveBaseline(finalize = false) {
@@ -243,6 +254,24 @@ export function FuelInventoryClient() {
     event.preventDefault();
     setDeliveryError(null);
     setMessage(null);
+
+    if (!deliveryForm.station_id) {
+      setDeliveryError("Unable to record fuel delivery: Station is required");
+      return;
+    }
+    if (!deliveryForm.product_code) {
+      setDeliveryError("Unable to record fuel delivery: Product is required");
+      return;
+    }
+    if (!deliveryForm.delivery_date) {
+      setDeliveryError("Unable to record fuel delivery: Delivery date is required");
+      return;
+    }
+    if (toNum(deliveryForm.liters) <= 0) {
+      setDeliveryError("Unable to record fuel delivery: Liters must be greater than zero");
+      return;
+    }
+
     setDeliverySaving(true);
 
     try {
@@ -258,11 +287,24 @@ export function FuelInventoryClient() {
         unit_cost: deliveryForm.unit_cost ? toNum(deliveryForm.unit_cost) : null,
         notes: deliveryForm.notes || null
       });
-      setMessage("Delivery recorded.");
+      setMessage("Fuel delivery recorded.");
       setDeliveryModalOpen(false);
+      setDeliveryForm({
+        station_id: result?.stations[0]?.id ?? "",
+        tank_id: "",
+        product_code: "DIESEL",
+        delivery_date: new Date().toISOString().slice(0, 10),
+        supplier_name: "",
+        invoice_number: "",
+        delivery_reference: "",
+        liters: "",
+        unit_cost: "",
+        notes: ""
+      });
       await reload();
     } catch (nextError) {
-      setDeliveryError(nextError instanceof Error ? nextError.message : "Unable to record delivery");
+      const errorMessage = nextError instanceof Error ? nextError.message : "Unknown error";
+      setDeliveryError(`Unable to record fuel delivery: ${errorMessage}`);
     } finally {
       setDeliverySaving(false);
     }
@@ -270,8 +312,11 @@ export function FuelInventoryClient() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold text-slate-900">Fuel inventory operations</h2>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-semibold text-slate-900">Fuel Inventory</h2>
+          <p className="text-sm text-slate-500">Track opening balances, deliveries, meter outflow, and variance by station.</p>
+        </div>
         <Button onClick={() => setDeliveryModalOpen(true)} type="button" variant="outline">
           Record Fuel Delivery
         </Button>
@@ -322,29 +367,31 @@ export function FuelInventoryClient() {
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full border-separate border-spacing-y-1 text-sm">
               <thead className="text-left text-slate-500">
                 <tr>
-                  <th className="py-2">Station</th>
-                  <th>Status</th>
-                  <th>Baseline at</th>
-                  <th className="text-right">Diesel opening</th>
-                  <th className="text-right">Special opening</th>
-                  <th className="text-right">Unleaded opening</th>
-                  <th>Action</th>
+                  <th className="py-2 pr-4">Station</th>
+                  <th className="pr-4">Status</th>
+                  <th className="pr-4">Baseline at</th>
+                  <th className="pr-4 text-right">Diesel opening</th>
+                  <th className="pr-4 text-right">Special opening</th>
+                  <th className="pr-4 text-right">Unleaded opening</th>
+                  <th className="min-w-32">Action</th>
                 </tr>
               </thead>
               <tbody>
                 {baselinePanelRows.map((row) => (
-                  <tr className="border-t" key={row.station.id}>
-                    <td className="py-2">{row.station.name}</td>
-                    <td>{row.status}</td>
-                    <td>{row.baseline?.baseline_at ? new Date(row.baseline.baseline_at).toLocaleString() : "-"}</td>
-                    <td className="text-right">{row.diesel.toFixed(3)}</td>
-                    <td className="text-right">{row.special.toFixed(3)}</td>
-                    <td className="text-right">{row.unleaded.toFixed(3)}</td>
+                  <tr className="rounded border bg-white" key={row.station.id}>
+                    <td className="py-2 pr-4 font-medium">{row.station.name}</td>
+                    <td className="pr-4 capitalize">{row.status}</td>
+                    <td className="pr-4">{row.baseline?.baseline_at ? new Date(row.baseline.baseline_at).toLocaleString() : "-"}</td>
+                    <td className="pr-4 text-right tabular-nums">{formatLiters(row.diesel)}</td>
+                    <td className="pr-4 text-right tabular-nums">{formatLiters(row.special)}</td>
+                    <td className="pr-4 text-right tabular-nums">{formatLiters(row.unleaded)}</td>
                     <td>
-                      {row.status === "missing" ? "Create baseline" : row.status === "draft" ? "Continue draft" : "View baseline"}
+                      <span className="text-slate-700">
+                        {row.status === "missing" ? "Create baseline" : row.status === "draft" ? "Continue draft" : "View baseline"}
+                      </span>
                       {row.baseline ? (
                         <Button className="ml-2" onClick={() => handleVoidBaseline(row.baseline!.id)} size="sm" variant="outline">
                           Void
@@ -434,25 +481,25 @@ export function FuelInventoryClient() {
         <Card>
           <CardHeader>
             <CardDescription>Diesel variance</CardDescription>
-            <CardTitle>{(result?.totals?.dieselVariance ?? 0).toFixed(3)}</CardTitle>
+            <CardTitle>{formatVariance(result?.totals?.dieselVariance ?? 0)}</CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader>
             <CardDescription>Special variance</CardDescription>
-            <CardTitle>{(result?.totals?.specialVariance ?? 0).toFixed(3)}</CardTitle>
+            <CardTitle>{formatVariance(result?.totals?.specialVariance ?? 0)}</CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader>
             <CardDescription>Unleaded variance</CardDescription>
-            <CardTitle>{(result?.totals?.unleadedVariance ?? 0).toFixed(3)}</CardTitle>
+            <CardTitle>{formatVariance(result?.totals?.unleadedVariance ?? 0)}</CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader>
             <CardDescription>Total meter liters out</CardDescription>
-            <CardTitle>{(result?.totals?.totalMeterLitersOut ?? 0).toFixed(3)}</CardTitle>
+            <CardTitle>{formatLiters(result?.totals?.totalMeterLitersOut ?? 0)}</CardTitle>
           </CardHeader>
         </Card>
         <Card>
@@ -469,42 +516,81 @@ export function FuelInventoryClient() {
           <CardDescription>Grouped by station with product-level metrics.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {groupedSummaryRows.map((group) => (
-            <section className="rounded-lg border" key={group.stationId}>
-              <div className="border-b bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-900">{group.stationName}</div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="text-left text-slate-500">
-                    <tr>
-                      <th className="py-2 pl-4">Product</th>
-                      <th className="text-right">Opening liters</th>
-                      <th className="text-right">Delivered liters</th>
-                      <th className="text-right">Meter liters out</th>
-                      <th className="text-right">Expected ending</th>
-                      <th className="text-right">Actual ending</th>
-                      <th className="text-right">Variance</th>
-                      <th className="pr-4">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {group.rows.map((row) => (
-                      <tr className="border-t" key={`${row.station_id}-${row.product}`}>
-                        <td className="py-2 pl-4 font-medium">{row.product}</td>
-                        <td className="text-right">{row.opening_liters.toFixed(3)}</td>
-                        <td className="text-right">{row.delivered_liters.toFixed(3)}</td>
-                        <td className="text-right">{row.meter_liters_out.toFixed(3)}</td>
-                        <td className="text-right">{row.expected_ending_liters.toFixed(3)}</td>
-                        <td className="text-right">{row.latest_actual_ending_liters.toFixed(3)}</td>
-                        <td className="text-right">{row.variance_liters.toFixed(3)} ({fuelVarianceLabel(row.variance_liters)})</td>
-                        <td className="pr-4">{row.baseline_status}</td>
+          {result && !result.stations.length ? <p className="text-sm text-slate-500">No stations found. Create stations before setting up fuel inventory.</p> : null}
+          {groupedSummaryRows.map((group) => {
+            const rowByProduct = new Map(group.rows.map((row) => [row.product, row]));
+            const rowsForDisplay = fuelProducts.map((product) => rowByProduct.get(product)).filter(Boolean);
+            const hasMissingBaseline = rowsForDisplay.some((row) => row?.baseline_status === "missing");
+            const totalExpected = rowsForDisplay.reduce((sum, row) => sum + (row?.expected_ending_liters ?? 0), 0);
+            const withActuals = rowsForDisplay.filter((row) => typeof row?.latest_actual_ending_liters === "number");
+            const totalActual = withActuals.reduce((sum, row) => sum + (row?.latest_actual_ending_liters ?? 0), 0);
+            const totalVariance = rowsForDisplay.reduce((sum, row) => sum + (row?.variance_liters ?? 0), 0);
+            const aggregate = stationAggregateStatus(totalVariance, hasMissingBaseline);
+
+            return (
+              <section className="rounded-lg border" key={group.stationId}>
+                <div className="space-y-3 border-b bg-slate-50 px-4 py-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-sm font-semibold text-slate-900">{group.stationName}</h3>
+                    <Badge className={statusBadgeClass(aggregate)}>{aggregate}</Badge>
+                  </div>
+                  <div className="grid gap-2 text-xs text-slate-600 sm:grid-cols-2 lg:grid-cols-4">
+                    <div>Baseline: {hasMissingBaseline ? "Missing" : "Ready"}</div>
+                    <div className="tabular-nums">Expected ending: {formatLiters(totalExpected)} L</div>
+                    <div className="tabular-nums">Latest actual: {withActuals.length ? `${formatLiters(totalActual)} L` : "-"}</div>
+                    <div className="tabular-nums">Variance: {formatVariance(totalVariance)} L</div>
+                  </div>
+                </div>
+                {hasMissingBaseline ? <p className="border-b px-4 py-2 text-xs text-amber-700">Opening baseline has not been created yet.</p> : null}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="text-left text-slate-500">
+                      <tr>
+                        <th className="py-2 pl-4">Product</th>
+                        <th className="text-right">Opening</th>
+                        <th className="text-right">Delivered</th>
+                        <th className="text-right">Meter out</th>
+                        <th className="text-right">Expected ending</th>
+                        <th className="text-right">Latest actual</th>
+                        <th className="text-right">Variance</th>
+                        <th className="pr-4">Status</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          ))}
-          {!groupedSummaryRows.length ? <p className="text-sm text-slate-500">No fuel inventory rows for this filter range.</p> : null}
+                    </thead>
+                    <tbody>
+                      {!rowsForDisplay.length ? (
+                        <tr>
+                          <td className="px-4 py-3 text-sm text-slate-500" colSpan={8}>
+                            No fuel inventory rows found for this station.
+                          </td>
+                        </tr>
+                      ) : (
+                        fuelProducts.map((product) => {
+                          const row = rowByProduct.get(product);
+                          const variance = row?.variance_liters ?? 0;
+                          const status = fuelVarianceLabel(variance, row?.baseline_status ?? "missing");
+                          return (
+                            <tr className="border-t" key={`${group.stationId}-${product}`}>
+                              <td className="py-2 pl-4 font-medium">{product}</td>
+                              <td className="text-right tabular-nums">{formatLiters(row?.opening_liters ?? 0)}</td>
+                              <td className="text-right tabular-nums">{formatLiters(row?.delivered_liters ?? 0)}</td>
+                              <td className="text-right tabular-nums">{formatLiters(row?.meter_liters_out ?? 0)}</td>
+                              <td className="text-right tabular-nums">{formatLiters(row?.expected_ending_liters ?? 0)}</td>
+                              <td className="text-right tabular-nums">{row ? formatLiters(row.latest_actual_ending_liters) : "-"}</td>
+                              <td className="text-right tabular-nums">{formatVariance(variance)}</td>
+                              <td className="pr-4">
+                                <Badge className={statusBadgeClass(status)}>{status}</Badge>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            );
+          })}
+          {result?.stations.length && !groupedSummaryRows.length ? <p className="text-sm text-slate-500">No fuel inventory rows for this filter range.</p> : null}
         </CardContent>
       </Card>
 
@@ -517,30 +603,57 @@ export function FuelInventoryClient() {
           }
         }}
         open={deliveryModalOpen}
-        title="Record fuel delivery"
+        title="Record Fuel Delivery"
       >
         <form className="space-y-3" onSubmit={handleSubmitDelivery}>
-          <select className="w-full rounded-md border px-3 py-2 text-sm" value={deliveryForm.station_id} onChange={(e) => setDeliveryForm((prev) => ({ ...prev, station_id: e.target.value }))}>
-            <option value="">Select station</option>
-            {(result?.stations ?? []).map((station) => (
-              <option key={station.id} value={station.id}>
-                {station.name}
-              </option>
-            ))}
-          </select>
-          <select className="w-full rounded-md border px-3 py-2 text-sm" value={deliveryForm.product_code} onChange={(e) => setDeliveryForm((prev) => ({ ...prev, product_code: e.target.value }))}>
-            <option>DIESEL</option>
-            <option>SPECIAL</option>
-            <option>UNLEADED</option>
-          </select>
+          <label className="block space-y-1 text-sm">
+            <span className="text-slate-600">Station</span>
+            <select className="w-full rounded-md border px-3 py-2 text-sm" value={deliveryForm.station_id} onChange={(e) => setDeliveryForm((prev) => ({ ...prev, station_id: e.target.value }))}>
+              <option value="">Select station</option>
+              {(result?.stations ?? []).map((station) => (
+                <option key={station.id} value={station.id}>
+                  {station.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block space-y-1 text-sm">
+            <span className="text-slate-600">Product</span>
+            <select className="w-full rounded-md border px-3 py-2 text-sm" value={deliveryForm.product_code} onChange={(e) => setDeliveryForm((prev) => ({ ...prev, product_code: e.target.value }))}>
+              <option>DIESEL</option>
+              <option>SPECIAL</option>
+              <option>UNLEADED</option>
+            </select>
+          </label>
+          <label className="block space-y-1 text-sm">
+            <span className="text-slate-600">Delivery date</span>
+            <Input type="date" value={deliveryForm.delivery_date} onChange={(e) => setDeliveryForm((prev) => ({ ...prev, delivery_date: e.target.value }))} />
+          </label>
+          <label className="block space-y-1 text-sm">
+            <span className="text-slate-600">Liters received</span>
+            <Input type="number" step="0.001" placeholder="Liters" value={deliveryForm.liters} onChange={(e) => setDeliveryForm((prev) => ({ ...prev, liters: e.target.value }))} />
+          </label>
+          <label className="block space-y-1 text-sm">
+            <span className="text-slate-600">Supplier</span>
+            <Input placeholder="Supplier" value={deliveryForm.supplier_name} onChange={(e) => setDeliveryForm((prev) => ({ ...prev, supplier_name: e.target.value }))} />
+          </label>
+          <label className="block space-y-1 text-sm">
+            <span className="text-slate-600">Invoice number</span>
+            <Input placeholder="Invoice #" value={deliveryForm.invoice_number} onChange={(e) => setDeliveryForm((prev) => ({ ...prev, invoice_number: e.target.value }))} />
+          </label>
+          <label className="block space-y-1 text-sm">
+            <span className="text-slate-600">Delivery reference</span>
+            <Input placeholder="Delivery reference" value={deliveryForm.delivery_reference} onChange={(e) => setDeliveryForm((prev) => ({ ...prev, delivery_reference: e.target.value }))} />
+          </label>
+          <label className="block space-y-1 text-sm">
+            <span className="text-slate-600">Unit cost</span>
+            <Input type="number" step="0.01" placeholder="Unit cost" value={deliveryForm.unit_cost} onChange={(e) => setDeliveryForm((prev) => ({ ...prev, unit_cost: e.target.value }))} />
+          </label>
+          <label className="block space-y-1 text-sm">
+            <span className="text-slate-600">Notes</span>
+            <Textarea placeholder="Notes" value={deliveryForm.notes} onChange={(e) => setDeliveryForm((prev) => ({ ...prev, notes: e.target.value }))} />
+          </label>
           <Input placeholder="Tank id (optional)" value={deliveryForm.tank_id} onChange={(e) => setDeliveryForm((prev) => ({ ...prev, tank_id: e.target.value }))} />
-          <Input type="date" value={deliveryForm.delivery_date} onChange={(e) => setDeliveryForm((prev) => ({ ...prev, delivery_date: e.target.value }))} />
-          <Input placeholder="Supplier" value={deliveryForm.supplier_name} onChange={(e) => setDeliveryForm((prev) => ({ ...prev, supplier_name: e.target.value }))} />
-          <Input placeholder="Invoice #" value={deliveryForm.invoice_number} onChange={(e) => setDeliveryForm((prev) => ({ ...prev, invoice_number: e.target.value }))} />
-          <Input placeholder="Delivery reference" value={deliveryForm.delivery_reference} onChange={(e) => setDeliveryForm((prev) => ({ ...prev, delivery_reference: e.target.value }))} />
-          <Input type="number" step="0.001" placeholder="Liters" value={deliveryForm.liters} onChange={(e) => setDeliveryForm((prev) => ({ ...prev, liters: e.target.value }))} />
-          <Input type="number" step="0.01" placeholder="Unit cost" value={deliveryForm.unit_cost} onChange={(e) => setDeliveryForm((prev) => ({ ...prev, unit_cost: e.target.value }))} />
-          <Textarea placeholder="Notes" value={deliveryForm.notes} onChange={(e) => setDeliveryForm((prev) => ({ ...prev, notes: e.target.value }))} />
           {deliveryError ? <p className="text-sm text-red-700">{deliveryError}</p> : null}
           <div className="flex justify-end gap-2">
             <Button
