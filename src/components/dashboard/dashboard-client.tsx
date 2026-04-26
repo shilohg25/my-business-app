@@ -79,7 +79,7 @@ export function DashboardClient() {
           <p className="text-sm text-slate-500">Owner overview for current month operations and executive metrics.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <a className="inline-flex h-10 items-center rounded-xl border px-4 text-sm font-medium hover:bg-slate-50" href={appPath("/imports/")}>Excel Import</a>
+          <a className="inline-flex h-10 items-center rounded-xl border px-4 text-sm font-medium hover:bg-slate-50" href={appPath("/field-capture/")}>Field Shift Capture (Coming soon)</a>
           <a className="inline-flex h-10 items-center rounded-xl border px-4 text-sm font-medium hover:bg-slate-50" href={appPath("/shift-reports/")}>Daily Shift Reports</a>
           <a className="inline-flex h-10 items-center rounded-xl border px-4 text-sm font-medium hover:bg-slate-50" href={appPath("/expenses/")}>Expenses</a>
           <a className="inline-flex h-10 items-center rounded-xl bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800" href={appPath("/reports/")}>Management Reports</a>
