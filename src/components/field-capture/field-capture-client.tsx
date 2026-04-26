@@ -16,6 +16,16 @@ import {
 } from "@/lib/data/field-capture";
 import { uploadCapturePhotoFile, type CapturePhotoType, type FuelShiftCapturePhotoRow } from "@/lib/data/field-capture-photos";
 import { buildFieldCaptureReviewSummary } from "@/lib/analytics/field-capture";
+import {
+  buildDefaultHandoffConfirmRows,
+  calculateHandoffVariance,
+  hasHandoffConfirmationInDraft,
+  mergeHandoffOpeningsIntoMeterRows,
+  requiresHandoffNotes,
+  type LatestMeterHandoffRow,
+  type ShiftHandoffConfirmRowInput
+} from "@/lib/analytics/field-capture-handoff";
+import { confirmShiftHandoff, fetchLatestMeterHandoff } from "@/lib/data/field-capture-handoff";
 
 type Row = Record<string, unknown>;
 const shiftOptions = ["5am–1pm", "1pm–9pm", "9pm–5am", "Custom"];
@@ -73,6 +83,11 @@ export default function FieldCaptureClient() {
   const [selectedPhotoFiles, setSelectedPhotoFiles] = useState<Partial<Record<CapturePhotoType, File>>>({});
   const [photoNotes, setPhotoNotes] = useState<Partial<Record<CapturePhotoType, string>>>({});
   const [photoStatus, setPhotoStatus] = useState<Partial<Record<CapturePhotoType, string>>>({});
+  const [latestHandoffRows, setLatestHandoffRows] = useState<LatestMeterHandoffRow[]>([]);
+  const [handoffRows, setHandoffRows] = useState<ShiftHandoffConfirmRowInput[]>([]);
+  const [handoffStatus, setHandoffStatus] = useState<string | null>(null);
+  const [handoffWarning, setHandoffWarning] = useState<string | null>(null);
+  const [handoffSkipped, setHandoffSkipped] = useState(false);
 
   const isEditable = activeSession?.status === "draft";
   const isOwnerAdmin = role === "Owner" || role === "Admin" || role === "Co-Owner";
@@ -114,6 +129,35 @@ export default function FieldCaptureClient() {
   useEffect(() => {
     void loadInitialData();
   }, []);
+
+  useEffect(() => {
+    const stationId = activeSession?.station_id;
+    if (!activeSession || !stationId || activeSession.status !== "draft") {
+      setLatestHandoffRows([]);
+      setHandoffRows([]);
+      setHandoffSkipped(false);
+      return;
+    }
+
+    if (hasHandoffConfirmationInDraft(activeSession.draft_payload)) {
+      setHandoffStatus("Opening meter readings already confirmed for this draft.");
+      setHandoffSkipped(false);
+      return;
+    }
+
+    fetchLatestMeterHandoff(stationId)
+      .then((rows) => {
+        setLatestHandoffRows(rows);
+        setHandoffRows(buildDefaultHandoffConfirmRows(rows));
+        setHandoffStatus(rows.length ? null : "No previous meter handoff readings found for this station. Enter opening readings manually.");
+        setHandoffSkipped(false);
+      })
+      .catch((error: Error) => {
+        setLatestHandoffRows([]);
+        setHandoffRows([]);
+        setHandoffStatus(error.message);
+      });
+  }, [activeSession?.id, activeSession?.station_id, activeSession?.status, activeSession?.draft_payload]);
 
   const shiftLabel = selectedShift === "Custom" ? customShift.trim() : selectedShift;
 
@@ -195,6 +239,41 @@ export default function FieldCaptureClient() {
 
   const updateRow = (rows: Row[], idx: number, key: string, value: string) => rows.map((row, i) => (i === idx ? { ...row, [key]: value } : row));
 
+  const updateHandoffRow = (index: number, key: "confirmed_opening_reading" | "notes", value: string) => {
+    setHandoffRows((current) => current.map((row, idx) => (idx === index ? { ...row, [key]: key === "confirmed_opening_reading" ? Number(value) : value } : row)));
+  };
+
+  const confirmHandoff = async () => {
+    if (!activeSession || handoffRows.length === 0) return;
+    setHandoffWarning(null);
+    for (const row of handoffRows) {
+      if (!Number.isFinite(row.confirmed_opening_reading) || row.confirmed_opening_reading < 0) {
+        setHandoffWarning("Confirmed opening reading is required and cannot be negative.");
+        return;
+      }
+      const variance = calculateHandoffVariance(row.suggested_opening_reading, row.confirmed_opening_reading);
+      if (requiresHandoffNotes(variance) && !String(row.notes ?? "").trim()) {
+        setHandoffWarning("Add notes for large differences between suggested and confirmed readings.");
+        return;
+      }
+    }
+
+    setLoading(true);
+    try {
+      await confirmShiftHandoff(activeSession.id, handoffRows);
+      setMeterReadings((current) => mergeHandoffOpeningsIntoMeterRows(current, handoffRows));
+      setHandoffStatus("Opening meter readings confirmed from previous shift.");
+      setLatestHandoffRows([]);
+      setHandoffRows([]);
+      setHandoffSkipped(false);
+      await loadInitialData();
+    } catch (error) {
+      setHandoffWarning(error instanceof Error ? error.message : "Unable to confirm shift handoff.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handlePhotoUpload = async (photoType: CapturePhotoType) => {
     if (!activeSession || !isEditable) return;
     const file = selectedPhotoFiles[photoType];
@@ -217,6 +296,7 @@ export default function FieldCaptureClient() {
         <p>Ready for review: {reviewQueue.length}</p>
         {reviewQueue.slice(0, 5).map((session) => <div key={session.id} className="rounded border p-2">
           <p>{session.report_date} • {session.fuel_stations?.name ?? session.station_id} • {session.shift_label}</p>
+          {!hasHandoffConfirmationInDraft(session.draft_payload) ? <p className="text-amber-700">Opening meter handoff was not confirmed.</p> : null}
           <a className="underline" href={getFieldCaptureReviewUrl(session.id)}>Review draft</a>
         </div>)}
       </> : <>
@@ -246,10 +326,55 @@ export default function FieldCaptureClient() {
       { title: "Credit receipts", rows: creditReceipts, setRows: setCreditReceipts, empty: emptyCreditRow, fields: ["company_customer", "receipt_number", "product", "liters", "amount"] },
       { title: "Lubricant sales", rows: lubricantSales, setRows: setLubricantSales, empty: emptyLubricantRow, fields: ["item_name", "quantity", "amount"] },
       { title: "Fuel deliveries", rows: fuelDeliveries, setRows: setFuelDeliveries, empty: emptyDeliveryRow, fields: ["product", "liters_received", "delivery_reference", "supplier"] }].map((section) => (
-        <section key={section.title} className="rounded-2xl border bg-white p-4 space-y-2"><h3 className="font-semibold">{section.title}</h3>
+        <div key={section.title} className="space-y-2">
+        {section.title === "Meter" ? <section className="rounded-2xl border bg-white p-4 space-y-2">
+          <h3 className="font-semibold">Shift Handoff</h3>
+          <p className="text-sm text-slate-600">Use the previous closing meter readings as this shift’s opening readings.</p>
+          {handoffStatus ? <p className="text-sm">{handoffStatus}</p> : null}
+          {handoffWarning ? <p className="text-sm text-amber-700">{handoffWarning}</p> : null}
+          {latestHandoffRows.length > 0 && !handoffSkipped ? <div className="space-y-2">
+            {latestHandoffRows.map((row, index) => {
+              const current = handoffRows[index];
+              const variance = calculateHandoffVariance(current?.suggested_opening_reading, current?.confirmed_opening_reading);
+              return <div key={`${row.product_code_normalized}-${row.pump_label_snapshot}-${row.nozzle_label ?? ""}-${index}`} className="rounded border p-2 grid gap-1 text-sm">
+                <p>Product: {row.product_code_normalized}</p>
+                <p>Pump: {row.pump_label_snapshot}</p>
+                <p>Nozzle: {row.nozzle_label ?? "-"}</p>
+                <p>Previous closing reading: {row.closing_meter_reading}</p>
+                <label className="grid gap-1">
+                  <span>Confirmed opening reading</span>
+                  <input
+                    type="number"
+                    className="min-h-11 rounded border px-3"
+                    value={String(current?.confirmed_opening_reading ?? row.closing_meter_reading)}
+                    onChange={(e) => updateHandoffRow(index, "confirmed_opening_reading", e.target.value)}
+                  />
+                </label>
+                <p>Difference: {variance.toFixed(3)} {variance !== 0 ? "(review)" : ""}</p>
+                <p>Source shift/date: {row.source_shift_label ?? "-"} • {row.source_report_date}</p>
+                <label className="grid gap-1">
+                  <span>Notes</span>
+                  <input
+                    className="min-h-11 rounded border px-3"
+                    value={String(current?.notes ?? "")}
+                    onChange={(e) => updateHandoffRow(index, "notes", e.target.value)}
+                  />
+                </label>
+              </div>;
+            })}
+            <button type="button" className="min-h-11 w-full rounded-xl bg-slate-900 text-white" onClick={() => void confirmHandoff()} disabled={loading}>Confirm opening readings</button>
+            <button type="button" className="min-h-11 w-full rounded-xl border" onClick={() => setHandoffSkipped(true)}>Skip for now</button>
+          </div> : null}
+          {handoffSkipped ? <p className="text-sm text-slate-600">You can confirm handoff readings later before submitting this draft.</p> : null}
+        </section> : null}
+        <section className="rounded-2xl border bg-white p-4 space-y-2"><h3 className="font-semibold">{section.title}</h3>
+          {section.title === "Meter" && section.rows.some((row) => Boolean(row.handoff_confirmed)) ? (
+            <p className="text-sm text-amber-700">Changing confirmed handoff readings may affect audit trail.</p>
+          ) : null}
           {section.rows.map((row, index) => <div key={`${section.title}-${index}`} className="rounded border p-2 grid gap-2">{section.fields.map((field) => <input key={field} disabled={!isEditable} className="min-h-11 rounded border px-3" placeholder={field} value={String(row[field] ?? "")} onChange={(e) => section.setRows(updateRow(section.rows, index, field, e.target.value))} />)}</div>)}
           <button type="button" disabled={!isEditable} className="min-h-11 w-full rounded-xl border" onClick={() => section.setRows((current: Row[]) => [...current, section.empty()])}>Add row</button>
         </section>
+        </div>
       ))}
 
       <section className="rounded-2xl border bg-white p-4 space-y-2"><h3 className="font-semibold">Photo evidence</h3>

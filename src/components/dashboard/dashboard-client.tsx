@@ -12,6 +12,7 @@ import { fetchFuelInventoryDashboard } from "@/lib/data/fuel-inventory";
 import { fetchStationExpenses } from "@/lib/data/expenses";
 import { buildExpenseAnalytics } from "@/lib/analytics/expenses";
 import { fetchCaptureReviewQueue } from "@/lib/data/field-capture";
+import { hasHandoffConfirmationInDraft } from "@/lib/analytics/field-capture-handoff";
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -38,6 +39,7 @@ export function DashboardClient() {
   const [expenseRows, setExpenseRows] = useState<Awaited<ReturnType<typeof fetchStationExpenses>>["rows"]>([]);
   const [captureReviewQueueCount, setCaptureReviewQueueCount] = useState(0);
   const [latestCaptureReadyId, setLatestCaptureReadyId] = useState<string | null>(null);
+  const [latestCaptureMissingHandoff, setLatestCaptureMissingHandoff] = useState(false);
 
   useEffect(() => {
     if (!liveData) {
@@ -65,6 +67,7 @@ export function DashboardClient() {
         setExpenseRows(expenseData.rows);
         setCaptureReviewQueueCount(reviewQueue.length);
         setLatestCaptureReadyId(reviewQueue[0]?.id ?? null);
+        setLatestCaptureMissingHandoff(reviewQueue.length > 0 && !hasHandoffConfirmationInDraft(reviewQueue[0]?.draft_payload));
       })
       .catch((nextError: Error) => {
         if (!active) return;
@@ -129,7 +132,7 @@ export function DashboardClient() {
         <Card><CardHeader><CardDescription>Stations missing fuel baseline</CardDescription><CardTitle>{fuelInventory?.totals?.missingBaselineStations ?? 0}</CardTitle></CardHeader></Card>
         <Card><CardHeader><CardDescription>Fuel shortage alerts</CardDescription><CardTitle>{fuelInventory?.totals?.shortageAlerts ?? 0}</CardTitle></CardHeader></Card>
         <Card><CardHeader><CardDescription>Fuel inventory</CardDescription><CardTitle><a className="underline" href={appPath("/inventory/fuel/")}>Open Fuel Inventory</a></CardTitle></CardHeader></Card>
-        <Card><CardHeader><CardDescription>Field Capture Review Queue</CardDescription><CardTitle>{captureReviewQueueCount}</CardTitle></CardHeader><CardContent className="pt-0 text-xs text-slate-500">{latestCaptureReadyId ? <a className="underline" href={appPath(`/field-capture/review/?id=${latestCaptureReadyId}`)}>Open latest ready draft</a> : <a className="underline" href={appPath("/field-capture/")}>Open Field Capture</a>}</CardContent></Card>
+        <Card><CardHeader><CardDescription>Field Capture Review Queue</CardDescription><CardTitle>{captureReviewQueueCount}</CardTitle></CardHeader><CardContent className="pt-0 text-xs text-slate-500">{latestCaptureReadyId ? <a className="underline" href={appPath(`/field-capture/review/?id=${latestCaptureReadyId}`)}>Open latest ready draft</a> : <a className="underline" href={appPath("/field-capture/")}>Open Field Capture</a>}{latestCaptureMissingHandoff ? <p className="pt-1 text-amber-700">Opening meter handoff was not confirmed.</p> : null}</CardContent></Card>
 
       </div>
 
