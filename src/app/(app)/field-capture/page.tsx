@@ -1,38 +1,74 @@
 import React from "react";
 import { appPath } from "@/lib/supabase/client";
 
-const sections = [
+const shiftOptions = ["5am–1pm", "1pm–9pm", "9pm–5am", "Custom"];
+
+const stagedSections = [
   {
-    title: "1. Closing meter photo capture",
-    text: "Cashiers will take closing meter photos. OCR will extract readings, then cashiers will confirm or correct values before publishing."
+    title: "1. Select station",
+    description: "Choose the active station before entering readings and cash details.",
+    status: "Ready for UI"
   },
   {
-    title: "2. Shift handoff",
-    text: "Confirmed closing readings become the next shift's opening readings. Both shifts should have a clear handoff trail."
+    title: "2. Select shift",
+    description: "Choose one shift option for the current report.",
+    status: "Ready for UI"
   },
   {
-    title: "3. Cash count",
-    text: "Cashiers will enter denomination counts and loose coins before submitting the shift."
+    title: "3. Opening / closing meter readings",
+    description: "Cashier enters opening and closing readings. Photo-assisted reading and OCR confirmation will be added later.",
+    status: "Coming soon"
   },
   {
-    title: "4. Credit/invoice receipts",
-    text: "Cashiers will photograph receipts. OCR can extract invoice or receipt number, while the cashier confirms product, liters, company, and amount."
+    title: "4. Cash count",
+    description: "Capture end-of-shift cash count with clear denomination totals.",
+    status: "Coming soon"
   },
   {
-    title: "5. Expenses",
-    text: "Cashiers will submit daily expenses with optional receipt photos."
+    title: "5. Receipts and expenses",
+    description: "Capture receipt references and expense entries with cashier confirmation.",
+    status: "Coming soon"
   },
   {
-    title: "6. Fuel delivery during shift",
-    text: "Cashiers can record fuel deliveries by product, liters received, delivery receipt photo, and optional before/after tank or supplier meter readings."
+    title: "6. Fuel delivery received during shift",
+    description: "Record product and liters received during this shift.",
+    status: "Coming soon"
   },
   {
-    title: "7. Final review before submit",
-    text: "The app will calculate fuel sales, cash count, expenses, lubricant sales, credit liters, and discrepancy before the cashier submits."
+    title: "7. Review summary",
+    description: "Show discrepancy summary before submit so cashier can confirm values.",
+    status: "Coming soon"
   },
   {
-    title: "8. Owner/Admin review",
-    text: "Submitted shifts appear in Daily Shift Reports for manager review and approval."
+    title: "8. Submit shift",
+    description: "Final submit remains disabled until secure publish workflow is available.",
+    status: "Planned"
+  }
+];
+
+const captureCards = [
+  {
+    title: "Meter reading photos",
+    lines: [
+      "Upload meter photo",
+      "OCR-assisted reading: coming soon",
+      "Cashier must confirm extracted values before saving."
+    ]
+  },
+  {
+    title: "Receipt photos",
+    lines: [
+      "Upload receipt photo",
+      "Receipt number extraction: coming soon",
+      "Cashier must confirm invoice number, amount, product, liters."
+    ]
+  },
+  {
+    title: "Fuel delivery receipt",
+    lines: [
+      "Upload delivery receipt",
+      "Cashier enters product and liters received manually for now."
+    ]
   }
 ];
 
@@ -40,30 +76,61 @@ export default function FieldCapturePage() {
   return (
     <div className="space-y-6">
       <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
-        <strong>Coming soon:</strong> Field Shift Capture is planned for mobile-ready cashier shift submission.
+        <strong>Mobile browser foundation:</strong> this page prepares cashier flow for field use. Continue using{" "}
+        <a className="underline" href={appPath("/shift-reports/")}>Daily Shift Reports</a> for active submissions.
       </div>
 
-      <header>
+      <header className="space-y-2">
         <h1 className="text-2xl font-semibold tracking-tight">Field Shift Capture</h1>
-        <p className="text-sm text-slate-500">Mobile-ready cashier workflow for photo-assisted shift closing and handoff.</p>
-        <p className="mt-2 text-sm text-slate-600">
-          This page describes the rollout direction. Continue using <a className="underline" href={appPath("/shift-reports/")}>Daily Shift Reports</a> for active operations until mobile submission is released.
-        </p>
+        <p className="text-sm text-slate-600">Mobile-first staged workflow for cashier shift capture on phone browsers.</p>
       </header>
 
       <section className="rounded-2xl border bg-white p-4">
-        <h2 className="text-base font-semibold text-slate-900">Future shift selection</h2>
-        <p className="mt-1.5 text-sm text-slate-600">Cashiers will choose the active shift during field capture, such as 5am–1pm, 1pm–9pm, 9pm–5am, or a station-specific shift option.</p>
-        <p className="mt-2 text-sm text-slate-600">Shift selection belongs in Field Shift Capture. Shift templates may later be managed in Settings. No separate Shift Setup page is needed for daily operations right now.</p>
+        <h2 className="text-base font-semibold text-slate-900">Shift options (UI preview)</h2>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          {shiftOptions.map((option) => (
+            <label key={option} className="flex min-h-11 items-center gap-2 rounded-xl border px-3 text-sm">
+              <input type="radio" name="shift-option-preview" disabled />
+              <span>{option}</span>
+            </label>
+          ))}
+        </div>
       </section>
 
       <section className="grid gap-3">
-        {sections.map((section) => (
-          <article className="rounded-2xl border bg-white p-4" key={section.title}>
-            <h2 className="text-base font-semibold text-slate-900">{section.title}</h2>
-            <p className="mt-1.5 text-sm text-slate-600">{section.text}</p>
+        {stagedSections.map((section) => (
+          <article key={section.title} className="rounded-2xl border bg-white p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-base font-semibold text-slate-900">{section.title}</h2>
+              <span className="rounded-full border bg-slate-50 px-2 py-1 text-xs text-slate-600">{section.status}</span>
+            </div>
+            <p className="mt-1.5 text-sm text-slate-600">{section.description}</p>
           </article>
         ))}
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-base font-semibold text-slate-900">Future photo-assisted capture cards</h2>
+        <div className="grid gap-3 md:grid-cols-3">
+          {captureCards.map((card) => (
+            <article key={card.title} className="rounded-2xl border bg-white p-4">
+              <h3 className="text-sm font-semibold text-slate-900">{card.title}</h3>
+              <ul className="mt-2 space-y-1 text-sm text-slate-600">
+                {card.lines.map((line) => (
+                  <li key={line}>• {line}</li>
+                ))}
+              </ul>
+              <button className="mt-3 min-h-11 w-full rounded-xl border px-3 text-sm text-slate-500" disabled type="button">
+                Upload (coming soon)
+              </button>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="rounded-2xl border bg-white p-4 text-sm text-slate-600">
+        <p>Photo-assisted reading and OCR confirmation will be added later.</p>
+        <p className="mt-2">No fake OCR output is shown or saved in this phase.</p>
       </section>
     </div>
   );

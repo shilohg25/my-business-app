@@ -1,10 +1,15 @@
 "use client";
 
+import { Menu } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { appPath, createSupabaseBrowserClient, isSupabaseConfigured, signOutOfSupabase } from "@/lib/supabase/client";
 
-export function Topbar() {
+type TopbarProps = {
+  onOpenMobileNav?: () => void;
+};
+
+export function Topbar({ onOpenMobileNav }: TopbarProps) {
   const [email, setEmail] = useState<string | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -51,40 +56,48 @@ export function Topbar() {
   }
 
   return (
-    <header className="no-print flex min-h-16 items-center justify-between gap-4 border-b bg-white px-6 py-3">
-      <div>
-        <div className="text-sm font-medium text-slate-900">Operations Console</div>
-        <div className="text-xs text-slate-500">Shift reports, remittance, inventory, and audit</div>
-        {authError ? <div className="mt-1 text-xs text-red-700">{authError}</div> : null}
-      </div>
+    <header className="no-print border-b bg-white px-4 py-3 sm:px-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <Button className="lg:hidden" size="sm" variant="outline" type="button" onClick={onOpenMobileNav}>
+              <Menu className="mr-2 h-4 w-4" />
+              Menu
+            </Button>
+            <div className="text-sm font-medium text-slate-900">Operations Console</div>
+          </div>
+          <div className="text-xs text-slate-500">Shift reports, remittance, inventory, and audit</div>
+          {authError ? <div className="mt-1 text-xs text-red-700">{authError}</div> : null}
+        </div>
 
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        {configured && authReady && email ? (
-          <span className="max-w-56 truncate rounded-full border bg-slate-50 px-3 py-1 text-xs text-slate-600">
-            {email}
-          </span>
-        ) : null}
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+          {configured && authReady && email ? (
+            <span className="max-w-full truncate rounded-full border bg-slate-50 px-3 py-1 text-xs text-slate-600 sm:max-w-56">
+              {email}
+            </span>
+          ) : null}
 
-        <Button variant="outline" onClick={() => window.print()}>
-          Print
-        </Button>
-
-        <a
-          className="inline-flex h-10 items-center justify-center rounded-xl bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800"
-          href={appPath("/shift-reports/new/")}
-        >
-          New Shift Report
-        </a>
-
-        {!configured ? (
-          <a className="inline-flex h-10 items-center justify-center rounded-xl border px-4 text-sm font-medium" href={appPath("/login/")}>Setup</a>
-        ) : email ? (
-          <Button variant="outline" onClick={signOut}>
-            Sign out
+          <Button variant="outline" onClick={() => window.print()}>
+            Print
           </Button>
-        ) : (
-          <a className="inline-flex h-10 items-center justify-center rounded-xl border px-4 text-sm font-medium" href={appPath("/login/")}>Login</a>
-        )}
+
+          <a
+            className="inline-flex h-11 items-center justify-center rounded-xl bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800"
+            href={appPath("/shift-reports/new/")}
+          >
+            New Shift Report
+          </a>
+
+          {!configured ? (
+            <a className="inline-flex h-11 items-center justify-center rounded-xl border px-4 text-sm font-medium" href={appPath("/login/")}>Setup</a>
+          ) : email ? (
+            <Button variant="outline" onClick={signOut}>
+              Sign out
+            </Button>
+          ) : (
+            <a className="inline-flex h-11 items-center justify-center rounded-xl border px-4 text-sm font-medium" href={appPath("/login/")}>Login</a>
+          )}
+        </div>
       </div>
     </header>
   );

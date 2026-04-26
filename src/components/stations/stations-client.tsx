@@ -95,7 +95,7 @@ export function StationsClient() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 overflow-x-hidden">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Stations</h1>
@@ -145,12 +145,12 @@ export function StationsClient() {
         </form>
       </SimpleModal>
 
-      <div className="rounded-2xl border bg-white p-5">
+      <div className="rounded-2xl border bg-white p-4 sm:p-5">
         <h2 className="text-lg font-semibold">Station list</h2>
         {stations.length === 0 ? <p className="mt-2 text-sm text-slate-500">No stations found.</p> : null}
         {stations.length > 0 ? (
           <div className="mt-3 overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[860px] text-sm">
               <thead className="text-left text-slate-500">
                 <tr>
                   <th className="py-2">Station</th>
