@@ -1,3 +1,4 @@
+import { buildStationFuelInventorySummary, normalizeFuelProductCode } from "@/lib/analytics/fuel-inventory";
 import { canUseLiveData } from "@/lib/data/client";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -6,217 +7,207 @@ function asNumber(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-export function normalizeFuelProductCode(code: string | null | undefined) {
-  const normalized = (code ?? "").trim().toUpperCase();
-  if (normalized === "ADO" || normalized === "DIESEL") return "DIESEL";
-  if (normalized === "SPU" || normalized === "SPECIAL") return "SPECIAL";
-  if (normalized === "ULG" || normalized === "UNLEADED") return "UNLEADED";
-  return "OTHER";
+function todayIso() {
+  return new Date().toISOString().slice(0, 10);
 }
 
-function monthStart() {
+function monthStartIso() {
   const now = new Date();
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString().slice(0, 10);
 }
 
-export interface FuelInventoryResult {
-  summary: {
-    dieselVariance: number;
-    specialVariance: number;
-    unleadedVariance: number;
-    deliveriesThisMonth: number;
-    grossLitersOutThisMonth: number;
+export interface FetchFuelInventoryDashboardOptions {
+  stationId?: string | null;
+  product?: string | null;
+  startDate?: string;
+  endDate?: string;
+}
+
+export async function fetchFuelInventoryBaselines() {
+  if (!canUseLiveData()) return { baselines: [], baselineProducts: [], meterBaselines: [] };
+
+  const supabase = createSupabaseBrowserClient();
+  const [baselineResult, productResult, meterResult] = await Promise.all([
+    supabase.from("fuel_station_fuel_baselines").select("id, station_id, baseline_at, status, notes, finalized_by, finalized_at, created_by, created_at").order("baseline_at", { ascending: false }),
+    supabase.from("fuel_station_fuel_baseline_products").select("id, baseline_id, station_id, product_id, product_code_snapshot, opening_liters, tank_id, notes, created_at"),
+    supabase.from("fuel_station_meter_baselines").select("id, baseline_id, station_id, pump_id, pump_label_snapshot, product_id, product_code_snapshot, nozzle_label, opening_meter_reading, notes, created_at")
+  ]);
+
+  const errors = [baselineResult.error, productResult.error, meterResult.error].filter(Boolean);
+  if (errors.length) throw new Error(errors[0]?.message ?? "Unable to fetch fuel baselines");
+
+  return {
+    baselines: baselineResult.data ?? [],
+    baselineProducts: productResult.data ?? [],
+    meterBaselines: meterResult.data ?? []
   };
-  productInventory: Array<{
-    station_id: string;
-    station_name: string | null;
-    product: string;
-    delivered_liters: number;
-    gross_liters_out: number;
-    latest_actual_ending: number;
-    latest_expected_ending: number;
-    variance_liters: number;
-  }>;
-  deliveries: Array<{
-    id: string;
-    delivery_date: string;
-    station_name: string | null;
-    product_code_snapshot: string;
-    supplier_name: string | null;
-    invoice_number: string | null;
-    delivery_reference: string | null;
-    liters: number | string | null;
-    unit_cost: number | string | null;
-    total_cost: number | string | null;
-  }>;
-  readings: Array<{
-    id: string;
-    reading_date: string;
-    station_name: string | null;
-    product_code_snapshot: string;
-    opening_liters: number | string | null;
-    received_liters: number | string | null;
-    meter_liters_out: number | string | null;
-    expected_ending_liters: number | string | null;
-    actual_ending_liters: number | string | null;
-    variance_liters: number | string | null;
-    notes: string | null;
-  }>;
-  stations: Array<{ id: string; name: string }>;
 }
 
-export function buildFuelInventorySummary(input: {
-  deliveries: Array<{ station_id: string; station_name: string | null; product_code_snapshot: string; liters: number | string | null }>;
-  meterReports: Array<{ station_id: string; fuel_meter_readings: Array<{ product_code_snapshot: string; liters_sold: number | string | null }> | null }>;
-  readings: Array<{
-    station_id: string;
-    station_name: string | null;
-    product_code_snapshot: string;
-    actual_ending_liters: number | string | null;
-    expected_ending_liters: number | string | null;
-    variance_liters: number | string | null;
-  }>;
-}) {
-  const aggregate = new Map<string, FuelInventoryResult["productInventory"][number]>();
-
-  input.deliveries.forEach((row) => {
-    const product = normalizeFuelProductCode(row.product_code_snapshot);
-    const key = `${row.station_id}::${product}`;
-    const existing = aggregate.get(key) ?? {
-      station_id: row.station_id,
-      station_name: row.station_name,
-      product,
-      delivered_liters: 0,
-      gross_liters_out: 0,
-      latest_actual_ending: 0,
-      latest_expected_ending: 0,
-      variance_liters: 0
-    };
-    existing.delivered_liters += asNumber(row.liters);
-    aggregate.set(key, existing);
-  });
-
-  input.meterReports.forEach((report) => {
-    (report.fuel_meter_readings ?? []).forEach((reading) => {
-      const product = normalizeFuelProductCode(reading.product_code_snapshot);
-      const key = `${report.station_id}::${product}`;
-      const existing = aggregate.get(key) ?? {
-        station_id: report.station_id,
-        station_name: null,
-        product,
-        delivered_liters: 0,
-        gross_liters_out: 0,
-        latest_actual_ending: 0,
-        latest_expected_ending: 0,
-        variance_liters: 0
-      };
-      existing.gross_liters_out += asNumber(reading.liters_sold);
-      aggregate.set(key, existing);
-    });
-  });
-
-  input.readings.forEach((row) => {
-    const product = normalizeFuelProductCode(row.product_code_snapshot);
-    const key = `${row.station_id}::${product}`;
-    const existing = aggregate.get(key) ?? {
-      station_id: row.station_id,
-      station_name: row.station_name,
-      product,
-      delivered_liters: 0,
-      gross_liters_out: 0,
-      latest_actual_ending: 0,
-      latest_expected_ending: 0,
-      variance_liters: 0
-    };
-    existing.latest_actual_ending = asNumber(row.actual_ending_liters);
-    existing.latest_expected_ending = asNumber(row.expected_ending_liters);
-    existing.variance_liters = asNumber(row.variance_liters);
-    aggregate.set(key, existing);
-  });
-
-  return Array.from(aggregate.values());
-}
-
-export async function fetchFuelInventoryData(): Promise<FuelInventoryResult> {
+export async function fetchFuelInventoryDashboard(options: FetchFuelInventoryDashboardOptions = {}) {
   if (!canUseLiveData()) {
     return {
-      summary: { dieselVariance: 0, specialVariance: 0, unleadedVariance: 0, deliveriesThisMonth: 0, grossLitersOutThisMonth: 0 },
-      productInventory: [],
+      stations: [],
+      products: [],
+      tanks: [],
+      baselines: [],
+      baselineProducts: [],
+      meterBaselines: [],
       deliveries: [],
       readings: [],
-      stations: []
+      meterReadings: [],
+      summaryRows: [],
+      allStationsSummary: []
     };
   }
 
   const supabase = createSupabaseBrowserClient();
-  const start = monthStart();
+  const startDate = options.startDate ?? monthStartIso();
+  const endDate = options.endDate ?? todayIso();
 
-  const [deliveriesResult, readingsResult, stationsResult, meterResult] = await Promise.all([
-    supabase
-      .from("fuel_deliveries")
-      .select("id, station_id, product_code_snapshot, supplier_id, delivery_date, invoice_number, delivery_reference, liters, unit_cost, total_cost")
-      .order("delivery_date", { ascending: false })
-      .limit(100),
-    supabase
-      .from("fuel_tank_readings")
-      .select("id, station_id, product_code_snapshot, reading_date, opening_liters, received_liters, meter_liters_out, expected_ending_liters, actual_ending_liters, variance_liters, notes")
-      .order("reading_date", { ascending: false })
-      .limit(100),
-    supabase.from("fuel_stations").select("id, name").order("name", { ascending: true }),
-    supabase
-      .from("fuel_shift_reports")
-      .select("id, report_date, station_id, fuel_meter_readings(product_code_snapshot, liters_sold)")
-      .gte("report_date", start)
-      .order("report_date", { ascending: false })
+  const stationsResult = await supabase.from("fuel_stations").select("id, name, is_active").eq("is_active", true).order("name", { ascending: true });
+  if (stationsResult.error) throw new Error(stationsResult.error.message);
+
+  const stations = (stationsResult.data ?? []) as Array<{ id: string; name: string; is_active: boolean }>;
+  const stationIds = stations.map((row) => row.id);
+  if (!stationIds.length) {
+    return {
+      stations: [],
+      products: [],
+      tanks: [],
+      baselines: [],
+      baselineProducts: [],
+      meterBaselines: [],
+      deliveries: [],
+      readings: [],
+      meterReadings: [],
+      summaryRows: [],
+      allStationsSummary: []
+    };
+  }
+
+  const [productsResult, tanksResult, baselineData, deliveriesResult, readingsResult, shiftReportsResult] = await Promise.all([
+    supabase.from("fuel_products").select("id, code, name, is_active").eq("is_fuel", true).eq("is_active", true).order("code", { ascending: true }),
+    supabase.from("fuel_tanks").select("id, station_id, product_id, product_code_snapshot, tank_label, is_active").in("station_id", stationIds).eq("is_active", true),
+    fetchFuelInventoryBaselines(),
+    supabase.from("fuel_deliveries").select("id, station_id, tank_id, product_id, product_code_snapshot, delivery_date, liters, invoice_number, delivery_reference, notes").in("station_id", stationIds).gte("delivery_date", startDate).lte("delivery_date", endDate).order("delivery_date", { ascending: false }),
+    supabase.from("fuel_tank_readings").select("id, station_id, tank_id, product_id, product_code_snapshot, reading_date, opening_liters, received_liters, meter_liters_out, expected_ending_liters, actual_ending_liters, variance_liters, source, notes").in("station_id", stationIds).gte("reading_date", startDate).lte("reading_date", endDate).order("reading_date", { ascending: false }),
+    supabase.from("fuel_shift_reports").select("station_id, report_date, fuel_meter_readings(product_code_snapshot, liters_sold)").in("station_id", stationIds).gte("report_date", startDate).lte("report_date", endDate)
   ]);
 
-  const errors = [deliveriesResult.error, readingsResult.error, stationsResult.error, meterResult.error].filter(Boolean);
-  if (errors.length) throw new Error(errors[0]?.message ?? "Unable to load fuel inventory data");
+  const errors = [productsResult.error, tanksResult.error, deliveriesResult.error, readingsResult.error, shiftReportsResult.error].filter(Boolean);
+  if (errors.length) throw new Error(errors[0]?.message ?? "Unable to fetch fuel inventory dashboard data");
 
-  const deliveriesRaw = (deliveriesResult.data ?? []) as Array<{ id: string; station_id: string; product_code_snapshot: string; supplier_id: string | null; delivery_date: string; invoice_number: string | null; delivery_reference: string | null; liters: number | string | null; unit_cost: number | string | null; total_cost: number | string | null }>;
-  const readingsRaw = (readingsResult.data ?? []) as Array<{ id: string; station_id: string; product_code_snapshot: string; reading_date: string; opening_liters: number | string | null; received_liters: number | string | null; meter_liters_out: number | string | null; expected_ending_liters: number | string | null; actual_ending_liters: number | string | null; variance_liters: number | string | null; notes: string | null }>;
-  const stations = (stationsResult.data ?? []) as Array<{ id: string; name: string }>;
-  const stationById = new Map(stations.map((station) => [station.id, station.name]));
+  const meterReadings = ((shiftReportsResult.data ?? []) as Array<{ station_id: string; fuel_meter_readings: Array<{ product_code_snapshot: string; liters_sold: number | string | null }> | null }>).flatMap(
+    (report) => (report.fuel_meter_readings ?? []).map((row) => ({ station_id: report.station_id, product_code_snapshot: row.product_code_snapshot, liters_sold: row.liters_sold }))
+  );
 
-  const supplierIds = Array.from(new Set(deliveriesRaw.map((row) => row.supplier_id).filter(Boolean))) as string[];
-  const suppliersResult = supplierIds.length
-    ? await supabase.from("fuel_suppliers").select("id, name").in("id", supplierIds)
-    : { data: [], error: null };
-  if (suppliersResult.error) throw new Error(suppliersResult.error.message);
-  const supplierById = new Map(((suppliersResult.data ?? []) as Array<{ id: string; name: string | null }>).map((supplier) => [supplier.id, supplier.name]));
+  const summary = buildStationFuelInventorySummary({
+    stations: stations.map((row) => ({ id: row.id, name: row.name })),
+    baselines: baselineData.baselines as Array<{ id: string; station_id: string; status: string; baseline_at: string }>,
+    baselineProducts: baselineData.baselineProducts as Array<{ baseline_id: string; station_id: string; product_code_snapshot: string; opening_liters: number | string | null }>,
+    deliveries: (deliveriesResult.data ?? []) as Array<{ station_id: string; product_code_snapshot: string; liters: number | string | null }>,
+    tankReadings: (readingsResult.data ?? []) as Array<{ station_id: string; product_code_snapshot: string; actual_ending_liters: number | string | null; reading_date: string }>,
+    meterReadings
+  });
 
-  const deliveries = deliveriesRaw.map((row) => ({
-    ...row,
-    station_name: stationById.get(row.station_id) ?? null,
-    supplier_name: row.supplier_id ? supplierById.get(row.supplier_id) ?? null : null
-  }));
-
-  const readings = readingsRaw.map((row) => ({
-    ...row,
-    station_name: stationById.get(row.station_id) ?? null
-  }));
-
-  const productInventory = buildFuelInventorySummary({
-    deliveries,
-    readings,
-    meterReports: (meterResult.data ?? []) as Array<{
-      station_id: string;
-      fuel_meter_readings: Array<{ product_code_snapshot: string; liters_sold: number | string | null }> | null;
-    }>
-  }).map((row) => ({ ...row, station_name: row.station_name ?? stationById.get(row.station_id) ?? null }));
-  const sumVariance = (product: string) => productInventory.filter((row) => row.product === product).reduce((sum, row) => sum + row.variance_liters, 0);
+  const filteredRows = summary.rows.filter((row) => {
+    const stationMatch = !options.stationId || row.station_id === options.stationId;
+    const productMatch = !options.product || options.product === "ALL" || row.product === normalizeFuelProductCode(options.product);
+    return stationMatch && productMatch;
+  });
 
   return {
-    summary: {
-      dieselVariance: sumVariance("DIESEL"),
-      specialVariance: sumVariance("SPECIAL"),
-      unleadedVariance: sumVariance("UNLEADED"),
-      deliveriesThisMonth: deliveries.filter((row) => row.delivery_date >= start).length,
-      grossLitersOutThisMonth: productInventory.reduce((sum, row) => sum + row.gross_liters_out, 0)
-    },
-    productInventory,
-    deliveries,
-    readings,
-    stations
+    stations,
+    products: productsResult.data ?? [],
+    tanks: tanksResult.data ?? [],
+    baselines: baselineData.baselines,
+    baselineProducts: baselineData.baselineProducts,
+    meterBaselines: baselineData.meterBaselines,
+    deliveries: deliveriesResult.data ?? [],
+    readings: readingsResult.data ?? [],
+    meterReadings,
+    summaryRows: filteredRows,
+    allStationsSummary: summary.allStationsSummary,
+    totals: {
+      totalMeterLitersOut: filteredRows.reduce((sum, row) => sum + asNumber(row.meter_liters_out), 0),
+      dieselVariance: filteredRows.filter((row) => row.product === "DIESEL").reduce((sum, row) => sum + asNumber(row.variance_liters), 0),
+      specialVariance: filteredRows.filter((row) => row.product === "SPECIAL").reduce((sum, row) => sum + asNumber(row.variance_liters), 0),
+      unleadedVariance: filteredRows.filter((row) => row.product === "UNLEADED").reduce((sum, row) => sum + asNumber(row.variance_liters), 0),
+      missingBaselineStations: stations.filter((station) => !summary.rows.some((row) => row.station_id === station.id && row.baseline_status !== "missing")).length,
+      shortageAlerts: filteredRows.filter((row) => row.variance_liters < 0).length
+    }
   };
 }
+
+export async function createFuelOpeningBaseline(payload: {
+  station_id: string;
+  baseline_at: string;
+  notes?: string | null;
+  products: Array<{ product_code: string; opening_liters: number; tank_label?: string | null; notes?: string | null }>;
+  meters: Array<{ pump_id?: string | null; pump_label: string; product_code: string; nozzle_label?: string | null; opening_meter_reading: number; notes?: string | null }>;
+  allow_replace?: boolean;
+  allow_partial?: boolean;
+}) {
+  if (!canUseLiveData()) throw new Error("Supabase is not configured");
+  const supabase = createSupabaseBrowserClient();
+  const { data, error } = await supabase.rpc("fuel_create_fuel_opening_baseline", { payload });
+  if (error) throw error;
+  return data as string;
+}
+
+export async function finalizeFuelOpeningBaseline(baselineId: string) {
+  if (!canUseLiveData()) throw new Error("Supabase is not configured");
+  const supabase = createSupabaseBrowserClient();
+  const { data, error } = await supabase.rpc("fuel_finalize_fuel_opening_baseline", { baseline_id: baselineId });
+  if (error) throw error;
+  return data as string;
+}
+
+export async function voidFuelOpeningBaseline(baselineId: string, reason: string) {
+  if (!canUseLiveData()) throw new Error("Supabase is not configured");
+  const supabase = createSupabaseBrowserClient();
+  const { data, error } = await supabase.rpc("fuel_void_fuel_opening_baseline", { baseline_id: baselineId, reason });
+  if (error) throw error;
+  return data as string;
+}
+
+export async function recordFuelDelivery(payload: {
+  station_id: string;
+  tank_id?: string | null;
+  product_code: string;
+  supplier_name?: string | null;
+  delivery_date: string;
+  invoice_number?: string | null;
+  delivery_reference?: string | null;
+  liters: number;
+  unit_cost?: number | null;
+  notes?: string | null;
+}) {
+  if (!canUseLiveData()) throw new Error("Supabase is not configured");
+  if (!payload.station_id) throw new Error("Station is required");
+  if (!payload.product_code) throw new Error("Product is required");
+  const supabase = createSupabaseBrowserClient();
+  const { data, error } = await supabase.rpc("fuel_record_fuel_delivery", { payload });
+  if (error) throw error;
+  return data as string;
+}
+
+export async function recordTankReading(payload: {
+  station_id: string;
+  tank_id?: string | null;
+  product_code: string;
+  reading_date: string;
+  opening_liters: number;
+  actual_ending_liters: number;
+  notes?: string | null;
+}) {
+  if (!canUseLiveData()) throw new Error("Supabase is not configured");
+  if (!payload.station_id) throw new Error("Station is required");
+  if (!payload.product_code) throw new Error("Product is required");
+  const supabase = createSupabaseBrowserClient();
+  const { data, error } = await supabase.rpc("fuel_record_tank_reading", { payload });
+  if (error) throw error;
+  return data as string;
+}
+
+export { normalizeFuelProductCode };
