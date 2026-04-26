@@ -12,6 +12,7 @@ import {
   markShiftCaptureReady,
   startShiftCaptureSession,
   updateShiftCaptureDraft,
+  fetchFieldCapturePricing,
   type FuelShiftCaptureSessionRow
 } from "@/lib/data/field-capture";
 import { uploadCapturePhotoFile, type CapturePhotoType, type FuelShiftCapturePhotoRow } from "@/lib/data/field-capture-photos";
@@ -35,6 +36,7 @@ const emptyExpenseRow = () => ({ category: "", description: "", amount: "", rece
 const emptyCreditRow = () => ({ company_customer: "", receipt_number: "", product: "", liters: "", amount: "" });
 const emptyDeliveryRow = () => ({ product: "", liters_received: "", delivery_reference: "", supplier: "", notes: "" });
 const emptyLubricantRow = () => ({ item_name: "", quantity: "", amount: "" });
+const emptyPrices = () => ({ DIESEL: "", SPECIAL: "", UNLEADED: "" });
 
 const photoCards: Array<{ type: CapturePhotoType; label: string }> = [
   { type: "meter_reading", label: "Meter reading photo" },
@@ -52,7 +54,8 @@ function parseDraftPayload(payload: Record<string, unknown> | null | undefined) 
     expenses: Array.isArray(payload?.expenses) ? (payload?.expenses as Row[]) : [emptyExpenseRow()],
     credit_receipts: Array.isArray(payload?.credit_receipts) ? (payload?.credit_receipts as Row[]) : [emptyCreditRow()],
     lubricant_sales: Array.isArray(payload?.lubricant_sales) ? (payload?.lubricant_sales as Row[]) : [emptyLubricantRow()],
-    fuel_deliveries: Array.isArray(payload?.fuel_deliveries) ? (payload?.fuel_deliveries as Row[]) : [emptyDeliveryRow()]
+    fuel_deliveries: Array.isArray(payload?.fuel_deliveries) ? (payload?.fuel_deliveries as Row[]) : [emptyDeliveryRow()],
+    prices: typeof payload?.prices === "object" && payload?.prices ? (payload.prices as Record<string, unknown>) : emptyPrices()
   };
 }
 
@@ -79,6 +82,8 @@ export default function FieldCaptureClient() {
   const [creditReceipts, setCreditReceipts] = useState<Row[]>([emptyCreditRow()]);
   const [lubricantSales, setLubricantSales] = useState<Row[]>([emptyLubricantRow()]);
   const [fuelDeliveries, setFuelDeliveries] = useState<Row[]>([emptyDeliveryRow()]);
+  const [draftPrices, setDraftPrices] = useState<Record<string, unknown>>(emptyPrices());
+  const [masterPriceMissing, setMasterPriceMissing] = useState<string[]>([]);
   const [capturePhotos, setCapturePhotos] = useState<FuelShiftCapturePhotoRow[]>([]);
   const [selectedPhotoFiles, setSelectedPhotoFiles] = useState<Partial<Record<CapturePhotoType, File>>>({});
   const [photoNotes, setPhotoNotes] = useState<Partial<Record<CapturePhotoType, string>>>({});
@@ -114,6 +119,7 @@ export default function FieldCaptureClient() {
         setCreditReceipts(parsed.credit_receipts);
         setLubricantSales(parsed.lubricant_sales);
         setFuelDeliveries(parsed.fuel_deliveries);
+      setDraftPrices(parsed.prices);
         await loadPhotos(newest.id);
       }
       if (profile?.role === "Owner" || profile?.role === "Admin" || profile?.role === "Co-Owner") {
@@ -159,6 +165,22 @@ export default function FieldCaptureClient() {
       });
   }, [activeSession?.id, activeSession?.station_id, activeSession?.status, activeSession?.draft_payload]);
 
+  useEffect(() => {
+    const stationId = activeSession?.station_id;
+    if (!stationId || activeSession?.status !== "draft") return;
+    fetchFieldCapturePricing(stationId, activeSession.report_date)
+      .then((pricing) => {
+        setDraftPrices((current) => ({
+          DIESEL: String(current.DIESEL ?? pricing.DIESEL ?? ""),
+          SPECIAL: String(current.SPECIAL ?? pricing.SPECIAL ?? ""),
+          UNLEADED: String(current.UNLEADED ?? pricing.UNLEADED ?? "")
+        }));
+        const missing = (["DIESEL", "SPECIAL", "UNLEADED"] as const).filter((code) => pricing[code] === null);
+        setMasterPriceMissing(missing);
+      })
+      .catch(() => setMasterPriceMissing(["DIESEL", "SPECIAL", "UNLEADED"]));
+  }, [activeSession?.id, activeSession?.station_id, activeSession?.report_date, activeSession?.status]);
+
   const shiftLabel = selectedShift === "Custom" ? customShift.trim() : selectedShift;
 
   const reviewSummary = useMemo(() => {
@@ -168,13 +190,14 @@ export default function FieldCaptureClient() {
       expenses,
       credit_receipts: creditReceipts,
       lubricant_sales: lubricantSales,
-      fuel_deliveries: fuelDeliveries
+      fuel_deliveries: fuelDeliveries,
+      prices: draftPrices
     };
     const summary = buildFieldCaptureReviewSummary(draftPayload);
     summary.completeness.photosPresent = capturePhotos.length > 0;
     if (!summary.completeness.photosPresent) summary.warnings.push("No photo evidence if expected.");
     return summary;
-  }, [meterReadings, cashCount, expenses, creditReceipts, lubricantSales, fuelDeliveries, capturePhotos.length]);
+  }, [meterReadings, cashCount, expenses, creditReceipts, lubricantSales, fuelDeliveries, draftPrices, capturePhotos.length]);
 
   const onStartSession = async () => {
     if (!selectedStationId || !shiftLabel) return setMessage("Select a station and shift before starting a session.");
@@ -191,6 +214,7 @@ export default function FieldCaptureClient() {
       setCreditReceipts(parsed.credit_receipts);
       setLubricantSales(parsed.lubricant_sales);
       setFuelDeliveries(parsed.fuel_deliveries);
+      setDraftPrices(parsed.prices);
       setMessage("Draft session started.");
       await loadInitialData();
     } catch (error) {
@@ -211,6 +235,7 @@ export default function FieldCaptureClient() {
         credit_receipts: creditReceipts,
         lubricant_sales: lubricantSales,
         fuel_deliveries: fuelDeliveries,
+        prices: draftPrices,
         calculated_summary: reviewSummary.totals
       });
       setMessage("Draft saved.");
@@ -224,6 +249,17 @@ export default function FieldCaptureClient() {
 
   const markReady = async () => {
     if (!activeSession) return;
+    const hasStation = Boolean(activeSession.station_id);
+    const hasShift = Boolean(activeSession.shift_label?.trim());
+    const hasMeter = meterReadings.length > 0;
+    const hasCash = cashCount.length > 0;
+    const hasLitersOut = reviewSummary.totals.netMeterLitersOut > 0;
+    const priceValues = [draftPrices.DIESEL, draftPrices.SPECIAL, draftPrices.UNLEADED].map((value) => Number(value));
+    const hasAnyPrice = priceValues.some((value) => Number.isFinite(value) && value > 0);
+    if (!hasStation || !hasShift || !hasMeter || !hasCash || (hasLitersOut && !hasAnyPrice)) {
+      setMessage("Fix required items before marking ready.");
+      return;
+    }
     await saveDraft();
     setLoading(true);
     try {
@@ -287,7 +323,7 @@ export default function FieldCaptureClient() {
     }
   };
 
-  const discrepancyLabel = reviewSummary.totals.discrepancy > 0 ? "Cash overage" : reviewSummary.totals.discrepancy < 0 ? "Cash shortage" : "Balanced";
+  const discrepancyLabel = reviewSummary.discrepancy.label;
 
   return <div className="space-y-4">
     <section className="rounded-2xl border bg-white p-4 space-y-2 text-sm">
@@ -377,6 +413,15 @@ export default function FieldCaptureClient() {
         </div>
       ))}
 
+
+      <section className="rounded-2xl border bg-white p-4 space-y-2"><h3 className="font-semibold">Fuel prices for this shift</h3>
+        {masterPriceMissing.length > 0 ? <p className="text-sm text-amber-700">No active master price found. Enter shift price manually.</p> : null}
+        {(["DIESEL", "SPECIAL", "UNLEADED"] as const).map((product) => <label key={product} className="grid gap-1 text-sm">
+          <span>{product === "UNLEADED" ? "Unleaded" : product === "SPECIAL" ? "Special" : "Diesel"} price</span>
+          <input type="number" min="0" step="0.0001" className="min-h-11 rounded border px-3" value={String(draftPrices[product] ?? "")} onChange={(e) => setDraftPrices((current) => ({ ...current, [product]: e.target.value }))} />
+        </label>)}
+      </section>
+
       <section className="rounded-2xl border bg-white p-4 space-y-2"><h3 className="font-semibold">Photo evidence</h3>
         {photoCards.map((card) => <div key={card.type} className="rounded border p-2 space-y-2">
           <p>{card.label}</p>
@@ -388,10 +433,16 @@ export default function FieldCaptureClient() {
 
       <section className="rounded-2xl border bg-white p-4 space-y-2 text-sm"><h3 className="font-semibold">Review before submit</h3>
         <div className="grid sm:grid-cols-2 gap-2">
-          <p>Meter liters out: {reviewSummary.totals.netMeterLitersOut.toFixed(2)}</p><p>Cash count total: {reviewSummary.totals.totalCashCount.toFixed(2)}</p>
-          <p>Expenses total: {reviewSummary.totals.totalExpenses.toFixed(2)}</p><p>Credit receipts total: {reviewSummary.totals.totalCreditAmount.toFixed(2)}</p>
-          <p>Lubricant sales total: {reviewSummary.totals.totalLubricantSales.toFixed(2)}</p><p>Fuel delivery liters: {reviewSummary.totals.totalFuelDeliveriesLiters.toFixed(2)}</p>
-          <p>Expected cash: {reviewSummary.totals.expectedCash.toFixed(2)}</p><p>Discrepancy: {reviewSummary.totals.discrepancy.toFixed(2)} ({discrepancyLabel})</p>
+          <p>Fuel sales: {reviewSummary.totals.fuelSalesAmount.toFixed(2)}</p><p>Actual cash counted: {reviewSummary.totals.actualCashCount.toFixed(2)}</p>
+          <p>Expenses: {reviewSummary.totals.expensesAmount.toFixed(2)}</p><p>Credit sales: {reviewSummary.totals.creditAmount.toFixed(2)}</p>
+          <p>Lubricant sales: {reviewSummary.totals.lubricantSalesAmount.toFixed(2)}</p><p>Fuel delivery liters: {reviewSummary.totals.totalFuelDeliveriesLiters.toFixed(2)}</p>
+          <p>Expected cash: {reviewSummary.totals.expectedCashRemittance.toFixed(2)}</p><p>Discrepancy: {reviewSummary.totals.discrepancyAmount.toFixed(2)} ({discrepancyLabel})</p>
+        </div>
+        <div className="rounded border p-2 text-sm"><p className="font-medium">Product breakdown</p>
+          {(["DIESEL", "SPECIAL", "UNLEADED"] as const).map((product) => {
+            const row = reviewSummary.byProduct[product];
+            return <p key={product}>{product}: {row.litersOut.toFixed(2)} × {row.price === null ? "Missing price" : row.price.toFixed(4)} = {row.salesAmount.toFixed(2)}</p>;
+          })}
         </div>
         <div className="rounded border p-2"><p className="font-medium">Warnings</p>{reviewSummary.warnings.length ? <ul className="list-disc pl-5">{reviewSummary.warnings.map((w) => <li key={w}>{w}</li>)}</ul> : <p>No review warnings detected.</p>}</div>
         <div className="rounded border p-2"><p className="font-medium">Completeness</p>
