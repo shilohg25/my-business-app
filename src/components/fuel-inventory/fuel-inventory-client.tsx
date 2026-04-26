@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ResetFiltersButton } from "@/components/ui/reset-filters-button";
 import { Textarea } from "@/components/ui/textarea";
 import { canUseLiveData } from "@/lib/data/client";
 import { getSupabaseConfigurationState } from "@/lib/supabase/client";
@@ -16,15 +17,7 @@ import {
   voidFuelOpeningBaseline
 } from "@/lib/data/fuel-inventory";
 import { fetchCurrentProfile } from "@/lib/data/profile";
-
-function todayIso() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function monthStartIso() {
-  const now = new Date();
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString().slice(0, 10);
-}
+import { areFiltersDefault, getCurrentMonthDateRange } from "@/lib/utils/filters";
 
 function toNum(value: string) {
   const parsed = Number(value);
@@ -43,6 +36,14 @@ export function FuelInventoryClient() {
 
   const params = typeof window === "undefined" ? null : new URLSearchParams(window.location.search);
   const initialStation = params?.get("station_id") ?? "ALL";
+  const monthDateRange = getCurrentMonthDateRange();
+  const defaultFilters = {
+    stationFilter: initialStation,
+    productFilter: "ALL",
+    datePreset: "THIS_MONTH",
+    startDate: monthDateRange.startDate,
+    endDate: monthDateRange.endDate
+  };
 
   const [loading, setLoading] = useState(liveData);
   const [error, setError] = useState<string | null>(null);
@@ -50,31 +51,33 @@ export function FuelInventoryClient() {
   const [role, setRole] = useState<string | null>(null);
   const [roleChecking, setRoleChecking] = useState(liveData);
 
-  const [stationFilter, setStationFilter] = useState(initialStation);
-  const [productFilter, setProductFilter] = useState("ALL");
-  const [datePreset, setDatePreset] = useState("THIS_MONTH");
-  const [startDate, setStartDate] = useState(monthStartIso());
-  const [endDate, setEndDate] = useState(todayIso());
+  const [stationFilter, setStationFilter] = useState(defaultFilters.stationFilter);
+  const [productFilter, setProductFilter] = useState(defaultFilters.productFilter);
+  const [datePreset, setDatePreset] = useState(defaultFilters.datePreset);
+  const [startDate, setStartDate] = useState(defaultFilters.startDate);
+  const [endDate, setEndDate] = useState(defaultFilters.endDate);
 
   const [result, setResult] = useState<Awaited<ReturnType<typeof fetchFuelInventoryDashboard>> | null>(null);
 
-  const [baselineDateTime, setBaselineDateTime] = useState(`${todayIso()}T00:00`);
+  const [baselineDateTime, setBaselineDateTime] = useState(`${new Date().toISOString().slice(0, 10)}T00:00`);
   const [baselineNotes, setBaselineNotes] = useState("");
   const [dieselOpening, setDieselOpening] = useState("0");
   const [specialOpening, setSpecialOpening] = useState("0");
   const [unleadedOpening, setUnleadedOpening] = useState("0");
   const [meterRows, setMeterRows] = useState([{ pump_label: "", product_code: "DIESEL", nozzle_label: "", opening_meter_reading: "0", notes: "" }]);
 
-  const [deliveryForm, setDeliveryForm] = useState({ station_id: "", tank_id: "", product_code: "DIESEL", delivery_date: todayIso(), supplier_name: "", invoice_number: "", delivery_reference: "", liters: "", unit_cost: "", notes: "" });
-  const [readingForm, setReadingForm] = useState({ station_id: "", tank_id: "", product_code: "DIESEL", reading_date: todayIso(), opening_liters: "", actual_ending_liters: "", notes: "" });
+  const [deliveryForm, setDeliveryForm] = useState({ station_id: "", tank_id: "", product_code: "DIESEL", delivery_date: new Date().toISOString().slice(0, 10), supplier_name: "", invoice_number: "", delivery_reference: "", liters: "", unit_cost: "", notes: "" });
+  const [readingForm, setReadingForm] = useState({ station_id: "", tank_id: "", product_code: "DIESEL", reading_date: new Date().toISOString().slice(0, 10), opening_liters: "", actual_ending_liters: "", notes: "" });
 
   useEffect(() => {
     if (datePreset === "TODAY") {
-      setStartDate(todayIso());
-      setEndDate(todayIso());
+      const date = new Date().toISOString().slice(0, 10);
+      setStartDate(date);
+      setEndDate(date);
     } else if (datePreset === "THIS_MONTH") {
-      setStartDate(monthStartIso());
-      setEndDate(todayIso());
+      const monthDefaults = getCurrentMonthDateRange();
+      setStartDate(monthDefaults.startDate);
+      setEndDate(monthDefaults.endDate);
     } else if (datePreset === "LAST_30") {
       const end = new Date();
       const start = new Date(end.getTime() - 29 * 86400000);
@@ -82,6 +85,16 @@ export function FuelInventoryClient() {
       setEndDate(end.toISOString().slice(0, 10));
     }
   }, [datePreset]);
+  const hasActiveFilters = !areFiltersDefault({ stationFilter, productFilter, datePreset, startDate, endDate }, defaultFilters);
+
+  function resetFilters() {
+    const nextDefaults = getCurrentMonthDateRange();
+    setStationFilter(initialStation);
+    setProductFilter("ALL");
+    setDatePreset("THIS_MONTH");
+    setStartDate(nextDefaults.startDate);
+    setEndDate(nextDefaults.endDate);
+  }
 
   const reload = async () => {
     if (!liveData) return;
@@ -191,11 +204,12 @@ export function FuelInventoryClient() {
 
       <Card>
         <CardHeader><CardTitle>Filters</CardTitle></CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-4">
+        <CardContent className="flex flex-wrap items-end gap-3">
           <select className="rounded-md border px-3 py-2 text-sm" value={stationFilter} onChange={(e) => setStationFilter(e.target.value)}><option value="ALL">All stations</option>{(result?.stations ?? []).map((station) => <option key={station.id} value={station.id}>{station.name}</option>)}</select>
           <select className="rounded-md border px-3 py-2 text-sm" value={productFilter} onChange={(e) => setProductFilter(e.target.value)}><option value="ALL">All products</option><option value="DIESEL">Diesel</option><option value="SPECIAL">Special</option><option value="UNLEADED">Unleaded</option></select>
           <select className="rounded-md border px-3 py-2 text-sm" value={datePreset} onChange={(e) => setDatePreset(e.target.value)}><option value="TODAY">Today</option><option value="THIS_MONTH">This Month</option><option value="LAST_30">Last 30 Days</option><option value="CUSTOM">Custom</option></select>
           <div className="grid grid-cols-2 gap-2"><Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} /><Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} /></div>
+          <ResetFiltersButton className="ml-auto" onClick={resetFilters} visible={hasActiveFilters} />
         </CardContent>
       </Card>
 

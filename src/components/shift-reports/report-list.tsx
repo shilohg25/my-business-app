@@ -4,8 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ResetFiltersButton } from "@/components/ui/reset-filters-button";
 import { canUseLiveData, listShiftReports, markReportStatus, type ShiftReportRow } from "@/lib/data/client";
 import { appPath, getSupabaseConfigurationState } from "@/lib/supabase/client";
+import { areFiltersDefault, getCurrentMonthDateRange } from "@/lib/utils/filters";
 import { formatCurrency } from "@/lib/utils";
 import { formatSignedCurrency, getDiscrepancyLabel, getDiscrepancyStatus } from "@/lib/analytics/discrepancy";
 import { getShiftReportSourceLabel } from "@/lib/domain/source-labels";
@@ -33,12 +35,23 @@ export function ReportList() {
   const liveData = canUseLiveData();
   const config = getSupabaseConfigurationState();
 
+  const monthDateRange = getCurrentMonthDateRange();
+  const defaultFilters = {
+    stationFilter: "all",
+    statusFilter: "all" as ReportStatusFilter,
+    startDate: monthDateRange.startDate,
+    endDate: monthDateRange.endDate,
+    searchText: ""
+  };
   const [reports, setReports] = useState<ShiftReportRow[]>([]);
   const [loading, setLoading] = useState(liveData);
   const [busyReportId, setBusyReportId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<ReportStatusFilter>("all");
-  const [searchText, setSearchText] = useState("");
+  const [stationFilter, setStationFilter] = useState(defaultFilters.stationFilter);
+  const [statusFilter, setStatusFilter] = useState<ReportStatusFilter>(defaultFilters.statusFilter);
+  const [startDate, setStartDate] = useState(defaultFilters.startDate);
+  const [endDate, setEndDate] = useState(defaultFilters.endDate);
+  const [searchText, setSearchText] = useState(defaultFilters.searchText);
 
   async function refresh() {
     if (!liveData) {
@@ -81,12 +94,30 @@ export function ReportList() {
     }
   }
 
+  function resetFilters() {
+    const nextDefaults = getCurrentMonthDateRange();
+    setStationFilter("all");
+    setStatusFilter("all");
+    setStartDate(nextDefaults.startDate);
+    setEndDate(nextDefaults.endDate);
+    setSearchText("");
+  }
+
   const filteredReports = useMemo(() => {
     const normalized = searchText.trim().toLowerCase();
 
     return reports.filter((report) => {
+      if (stationFilter !== "all" && report.fuel_stations?.name !== stationFilter) {
+        return false;
+      }
+
       if (statusFilter !== "all" && report.status !== statusFilter) {
         return false;
+      }
+
+      if (report.report_date) {
+        if (startDate && report.report_date < startDate) return false;
+        if (endDate && report.report_date > endDate) return false;
       }
 
       if (!normalized) {
@@ -96,7 +127,16 @@ export function ReportList() {
       const haystack = `${report.duty_name ?? ""} ${report.shift_time_label ?? ""}`.toLowerCase();
       return haystack.includes(normalized);
     });
-  }, [reports, searchText, statusFilter]);
+  }, [endDate, reports, searchText, startDate, stationFilter, statusFilter]);
+  const currentFilters = { stationFilter, statusFilter, startDate, endDate, searchText };
+  const hasActiveFilters = !areFiltersDefault(currentFilters, defaultFilters);
+  const stationOptions = useMemo(
+    () =>
+      Array.from(new Set(reports.map((report) => report.fuel_stations?.name ?? "").filter(Boolean))).filter(
+        (name): name is string => Boolean(name)
+      ),
+    [reports]
+  );
 
   return (
     <div className="rounded-2xl border bg-white p-5">
@@ -110,24 +150,22 @@ export function ReportList() {
       {loading ? <p className="text-sm text-slate-500">Loading reports...</p> : null}
 
       {!loading ? (
-        <div className="mb-4 grid gap-3 md:grid-cols-[1fr_auto]">
-          <Input
-            aria-label="Search by duty cashier"
-            placeholder="Search duty/cashier or shift"
-            value={searchText}
-            onChange={(event) => setSearchText(event.target.value)}
-          />
-          <select
-            className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
-            value={statusFilter}
-            onChange={(event) => setStatusFilter(event.target.value as ReportStatusFilter)}
-          >
-            <option value="all">All statuses</option>
-            <option value="draft">Draft</option>
-            <option value="submitted">Submitted</option>
-            <option value="reviewed">Reviewed</option>
-            <option value="approved">Approved</option>
+        <div className="mb-4 flex flex-wrap items-end gap-3">
+          <Input aria-label="Search by duty cashier" placeholder="Search duty/cashier or shift" value={searchText} onChange={(event) => setSearchText(event.target.value)} />
+          <select className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm" value={stationFilter} onChange={(event) => setStationFilter(event.target.value)}>
+            <option value="all">All stations</option>
+            {stationOptions.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
           </select>
+          <select className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as ReportStatusFilter)}>
+            <option value="all">All statuses</option><option value="draft">Draft</option><option value="submitted">Submitted</option><option value="reviewed">Reviewed</option><option value="approved">Approved</option>
+          </select>
+          <Input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
+          <Input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
+          <ResetFiltersButton className="ml-auto" onClick={resetFilters} visible={hasActiveFilters} />
         </div>
       ) : null}
 
