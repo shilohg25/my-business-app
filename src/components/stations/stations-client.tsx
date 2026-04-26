@@ -13,6 +13,8 @@ export function StationsClient() {
   const config = getSupabaseConfigurationState();
 
   const [stations, setStations] = useState<StationManagementRow[]>([]);
+  const [role, setRole] = useState<string | null>(null);
+  const [canCreateStation, setCanCreateStation] = useState(false);
   const [loading, setLoading] = useState(liveData);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -29,7 +31,9 @@ export function StationsClient() {
   const reload = async () => {
     if (!liveData) return;
     const data = await fetchStationManagementData();
-    setStations(data);
+    setStations(data.rows);
+    setRole(data.role);
+    setCanCreateStation(data.canCreateStation);
   };
 
   useEffect(() => {
@@ -54,7 +58,7 @@ export function StationsClient() {
     setError(null);
     setMessage(null);
     try {
-      const id = await createStationViaRpc({
+      const created = await createStationViaRpc({
         code,
         name,
         address,
@@ -63,7 +67,7 @@ export function StationsClient() {
         business_permit: businessPermit,
         official_report_header: header
       });
-      setMessage(`Station created. Station id: ${id}`);
+      setMessage(`Station created. Station id: ${created.station_id}`);
       setCode("");
       setName("");
       setAddress("");
@@ -88,6 +92,7 @@ export function StationsClient() {
 
       <div className="rounded-2xl border bg-white p-5">
         <h2 className="text-lg font-semibold">Add station</h2>
+        {!canCreateStation ? <p className="mt-2 text-sm text-amber-700">Only Owner can create stations. Current role: {role ?? "Unknown"}.</p> : null}
         <form className="mt-3 space-y-2" onSubmit={submitCreateStation}>
           <div className="grid gap-2 md:grid-cols-2">
             <Input placeholder="Code" value={code} onChange={(e) => setCode(e.target.value)} required />
@@ -98,7 +103,7 @@ export function StationsClient() {
             <Input placeholder="Business permit" value={businessPermit} onChange={(e) => setBusinessPermit(e.target.value)} />
           </div>
           <Input placeholder="Official report header" value={header} onChange={(e) => setHeader(e.target.value)} />
-          <Button type="submit" disabled={submitting}>{submitting ? "Creating..." : "Create station"}</Button>
+          <Button type="submit" disabled={submitting || !canCreateStation}>{submitting ? "Creating..." : "Create station"}</Button>
         </form>
       </div>
 
@@ -108,7 +113,7 @@ export function StationsClient() {
         {stations.length > 0 ? (
           <div className="mt-3 overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="text-left text-slate-500"><tr><th className="py-2">Code</th><th>Name</th><th>Address</th><th>Active</th><th>Report header</th><th className="text-right">Products configured</th><th className="text-right">Pumps count</th><th className="text-right">Shift templates count</th></tr></thead>
+              <thead className="text-left text-slate-500"><tr><th className="py-2">Code</th><th>Name</th><th>Address</th><th>Active</th><th className="text-right">Products configured</th><th className="text-right">Pumps count</th><th className="text-right">Shift templates count</th><th>Linked inventory location</th></tr></thead>
               <tbody>
                 {stations.map((station) => (
                   <tr className="border-t" key={station.id}>
@@ -116,10 +121,10 @@ export function StationsClient() {
                     <td>{station.name}</td>
                     <td>{station.address ?? "-"}</td>
                     <td><Badge>{station.is_active ? "Active" : "Inactive"}</Badge></td>
-                    <td>{station.official_report_header ?? "-"}</td>
                     <td className="text-right">{station.products_configured}</td>
                     <td className="text-right">{station.pumps_count}</td>
                     <td className="text-right">{station.shift_templates_count}</td>
+                    <td>{station.inventory_location_code ?? "-"}</td>
                   </tr>
                 ))}
               </tbody>
