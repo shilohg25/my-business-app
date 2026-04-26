@@ -4,7 +4,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "AKY Fuel Operations",
   description: "Fuel station shift and remittance operations",
-  manifest: "/manifest.webmanifest"
+  manifest: "/my-business-app/manifest.webmanifest"
 };
 
 export const viewport: Viewport = {

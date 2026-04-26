@@ -55,11 +55,27 @@ export function buildFuelDeliveryBatchPayload(payload: FuelDeliveryBatchPayload)
   return { ...payload, items };
 }
 
+export function mapStationAssignmentFetchError(error: { code?: string; message?: string; details?: string }) {
+  const details = `${error.code ?? ""} ${error.message ?? ""} ${error.details ?? ""}`.toLowerCase();
+  const missingAssignmentSetup =
+    details.includes("fuel_get_my_station_assignments") ||
+    details.includes("fuel_user_station_assignments") ||
+    details.includes("pgrst202") ||
+    details.includes("schema cache") ||
+    details.includes("404");
+  if (!missingAssignmentSetup) return null;
+  return new Error("Station assignment setup is missing. Owner must run the latest Supabase migration.");
+}
+
 export async function fetchAllowedDeliveryStations() {
   if (!canUseLiveData()) return [] as AllowedDeliveryStation[];
   const supabase = createSupabaseBrowserClient();
   const { data, error } = await supabase.rpc("fuel_get_my_station_assignments");
-  if (error) throw error;
+  if (error) {
+    const mappedError = mapStationAssignmentFetchError(error);
+    if (mappedError) throw mappedError;
+    throw error;
+  }
   return (data ?? []) as AllowedDeliveryStation[];
 }
 
