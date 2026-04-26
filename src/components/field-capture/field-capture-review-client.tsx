@@ -13,6 +13,8 @@ import {
   type FuelShiftCaptureSessionRow
 } from "@/lib/data/field-capture";
 import type { FuelShiftCapturePhotoRow } from "@/lib/data/field-capture-photos";
+import { hasHandoffConfirmationInDraft } from "@/lib/analytics/field-capture-handoff";
+import { fetchShiftHandoffConfirmations, type FuelShiftCaptureHandoffRow } from "@/lib/data/field-capture-handoff";
 
 function ReviewInner() {
   const params = useSearchParams();
@@ -20,20 +22,23 @@ function ReviewInner() {
   const [session, setSession] = useState<FuelShiftCaptureSessionRow | null>(null);
   const [photos, setPhotos] = useState<FuelShiftCapturePhotoRow[]>([]);
   const [role, setRole] = useState<string | null>(null);
+  const [handoffRows, setHandoffRows] = useState<FuelShiftCaptureHandoffRow[]>([]);
   const [publishing, setPublishing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const loadReviewData = async () => {
     if (!id) return;
-    const [sessionRow, photoRows, profile] = await Promise.all([
+    const [sessionRow, photoRows, profile, handoff] = await Promise.all([
       fetchCaptureSessionForReview(id),
       fetchCaptureSessionPhotos(id),
-      fetchCurrentProfile()
+      fetchCurrentProfile(),
+      fetchShiftHandoffConfirmations(id).catch(() => [])
     ]);
     setSession(sessionRow);
     setPhotos(photoRows);
     setRole(profile?.role ?? null);
+    setHandoffRows(handoff);
   };
 
   useEffect(() => {
@@ -45,6 +50,9 @@ function ReviewInner() {
     const built = buildFieldCaptureReviewSummary(session?.draft_payload ?? {});
     built.completeness.photosPresent = photos.length > 0;
     if (!built.completeness.photosPresent) built.warnings.push("No photo evidence if expected.");
+    if (!hasHandoffConfirmationInDraft(session?.draft_payload)) {
+      built.warnings.push("Opening meter handoff was not confirmed.");
+    }
     return built;
   }, [session?.draft_payload, photos.length]);
 
@@ -102,6 +110,20 @@ function ReviewInner() {
     </section>
 
     <section className="rounded border bg-white p-3"><p className="font-semibold">Meter readings</p><pre>{JSON.stringify((session.draft_payload?.meter_readings ?? []), null, 2)}</pre></section>
+    <section className="rounded border bg-white p-3">
+      <p className="font-semibold">Handoff Confirmation</p>
+      {handoffRows.length === 0 ? <p>No handoff confirmation recorded.</p> : <div className="space-y-2">
+        {handoffRows.map((row) => <div key={row.id} className="rounded border p-2">
+          <p>Pump/Product/Nozzle: {row.pump_label_snapshot} / {row.product_code_snapshot} / {row.nozzle_label ?? "-"}</p>
+          <p>Suggested opening: {row.suggested_opening_reading}</p>
+          <p>Confirmed opening: {row.confirmed_opening_reading}</p>
+          <p>Variance: {row.variance_from_suggested}</p>
+          <p>Confirmed by: {row.confirmed_by}</p>
+          <p>Confirmed at: {new Date(row.confirmed_at).toLocaleString()}</p>
+          <p>Notes: {row.notes ?? "-"}</p>
+        </div>)}
+      </div>}
+    </section>
 
     <section className="rounded border bg-white p-3 space-y-2"><p className="font-semibold">Review actions</p>
       {session.status === "draft" ? <p>Still in draft.</p> : null}
