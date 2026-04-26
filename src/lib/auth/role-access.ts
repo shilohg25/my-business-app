@@ -20,11 +20,23 @@ export function canAccessRoute(role: AppRole | null, pathname: string): boolean 
   if (role === "Co-Owner") return true;
 
   if (role === "User") {
-    if (normalizedPath === "/" || normalizedPath === "/dashboard/") return true;
+    if (normalizedPath === "/") return true;
     return USER_ALLOWED_PREFIXES.some((prefix) => normalizedPath.startsWith(prefix));
   }
 
   return false;
+}
+
+export function canCreateManualShiftReport(role: AppRole | null): boolean {
+  return role === "Owner" || role === "Admin";
+}
+
+export function canUseFieldCapture(role: AppRole | null): boolean {
+  return role === "Owner" || role === "Admin" || role === "Co-Owner" || role === "User";
+}
+
+export function canRecordFieldFuelDelivery(role: AppRole | null): boolean {
+  return role === "Owner" || role === "Admin" || role === "User";
 }
 
 export function getDefaultRouteForRole(role: AppRole | null) {

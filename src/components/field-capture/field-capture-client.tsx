@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { listStations, type StationRow } from "@/lib/data/client";
-import { fetchCurrentProfile } from "@/lib/data/profile";
+import { fetchCurrentProfile, type AppRole } from "@/lib/data/profile";
 import {
   fetchCaptureReviewQueue,
   fetchCaptureSessionById,
@@ -28,6 +28,7 @@ import {
 } from "@/lib/analytics/field-capture-handoff";
 import { confirmShiftHandoff, fetchLatestMeterHandoff } from "@/lib/data/field-capture-handoff";
 import { fetchAllowedDeliveryStations, type AllowedDeliveryStation } from "@/lib/data/fuel-deliveries";
+import { canRecordFieldFuelDelivery } from "@/lib/auth/role-access";
 import { FuelDeliveryForm } from "@/components/fuel-deliveries/fuel-delivery-form";
 
 type Row = Record<string, unknown>;
@@ -74,7 +75,7 @@ export default function FieldCaptureClient() {
   const [activeSession, setActiveSession] = useState<FuelShiftCaptureSessionRow | null>(null);
   const [mySessions, setMySessions] = useState<FuelShiftCaptureSessionRow[]>([]);
   const [reviewQueue, setReviewQueue] = useState<FuelShiftCaptureSessionRow[]>([]);
-  const [role, setRole] = useState<string | null>(null);
+  const [role, setRole] = useState<AppRole | null>(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -96,6 +97,7 @@ export default function FieldCaptureClient() {
   const [handoffWarning, setHandoffWarning] = useState<string | null>(null);
   const [handoffSkipped, setHandoffSkipped] = useState(false);
   const [allowedDeliveryStations, setAllowedDeliveryStations] = useState<AllowedDeliveryStation[]>([]);
+  const [stationAssignmentError, setStationAssignmentError] = useState<string | null>(null);
 
   const isEditable = activeSession?.status === "draft";
   const isOwnerAdmin = role === "Owner" || role === "Admin" || role === "Co-Owner";
@@ -108,11 +110,18 @@ export default function FieldCaptureClient() {
   const loadInitialData = async () => {
     setLoading(true);
     try {
-      const [stationRows, sessions, profile, assignedStations] = await Promise.all([listStations(), fetchMyDraftCaptureSessions(), fetchCurrentProfile(), fetchAllowedDeliveryStations()]);
+      const [stationRows, sessions, profile] = await Promise.all([listStations(), fetchMyDraftCaptureSessions(), fetchCurrentProfile()]);
       setStations(stationRows.filter((station) => station.is_active));
       setRole(profile?.role ?? null);
       setMySessions(sessions);
-      setAllowedDeliveryStations(assignedStations);
+      try {
+        const assignedStations = await fetchAllowedDeliveryStations();
+        setAllowedDeliveryStations(assignedStations);
+        setStationAssignmentError(null);
+      } catch (error) {
+        setAllowedDeliveryStations([]);
+        setStationAssignmentError(error instanceof Error ? error.message : "Unable to load station assignments.");
+      }
       const newest = sessions[0] ?? null;
       setActiveSession(newest);
       if (newest) {
@@ -358,12 +367,24 @@ export default function FieldCaptureClient() {
     </section>
 
 
-    <FuelDeliveryForm
-      mode="field"
-      allowedStations={allowedDeliveryStations}
-      defaultStationId={activeSession?.station_id ?? selectedStationId}
-      onSuccess={() => setMessage("Fuel delivery recorded.")}
-    />
+    {canRecordFieldFuelDelivery(role) ? (
+      stationAssignmentError ? (
+        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          {stationAssignmentError}
+        </section>
+      ) : allowedDeliveryStations.length === 0 ? (
+        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          No station assigned to this user. Ask Owner to assign a station in Settings.
+        </section>
+      ) : (
+        <FuelDeliveryForm
+          mode="field"
+          allowedStations={allowedDeliveryStations}
+          defaultStationId={activeSession?.station_id ?? selectedStationId}
+          onSuccess={() => setMessage("Fuel delivery recorded.")}
+        />
+      )
+    ) : null}
 
     {activeSession ? <>
       <section className="rounded-2xl border bg-white p-4 text-sm"><p>Status: {activeSession.status}</p>{!isEditable ? <p className="text-amber-700">This session is read-only.</p> : null}{activeSession.status === "published" && activeSession.published_shift_report_id ? <p><a className="underline" href={getPublishedShiftReportUrl(activeSession.published_shift_report_id)}>View final report</a></p> : null}</section>

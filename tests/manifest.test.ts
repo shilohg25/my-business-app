@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
+import { metadata } from "@/app/layout";
 
 describe("PWA manifest", () => {
   it("exists with AKY Fuel Ops GitHub Pages settings", () => {
@@ -16,5 +17,9 @@ describe("PWA manifest", () => {
     expect(manifest.name).toBe("AKY Fuel Ops");
     expect(manifest.start_url).toBe("/my-business-app/");
     expect(manifest.display).toBe("standalone");
+  });
+
+  it("uses GitHub Pages manifest metadata path", () => {
+    expect(metadata.manifest).toBe("/my-business-app/manifest.webmanifest");
   });
 });

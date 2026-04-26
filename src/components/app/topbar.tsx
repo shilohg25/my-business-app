@@ -2,18 +2,41 @@
 
 import { Menu } from "lucide-react";
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { appPath, createSupabaseBrowserClient, isSupabaseConfigured, signOutOfSupabase } from "@/lib/supabase/client";
+import { canCreateManualShiftReport } from "@/lib/auth/role-access";
+import { fetchCurrentProfile, type AppRole } from "@/lib/data/profile";
+import { appPath, createSupabaseBrowserClient, isSupabaseConfigured, signOutOfSupabase, stripAppBasePath } from "@/lib/supabase/client";
 
 type TopbarProps = {
   onOpenMobileNav?: () => void;
 };
 
+export function getTopbarPrimaryAction(role: AppRole | null, currentPath: string) {
+  const normalizedPath = (stripAppBasePath(currentPath).replace(/\/+$/, "") || "/");
+  if (canCreateManualShiftReport(role)) {
+    return { href: appPath("/shift-reports/new/"), label: "Manual Shift Report" } as const;
+  }
+  if (role === "User" && normalizedPath !== "/field-capture") {
+    return { href: appPath("/field-capture/"), label: "Start Field Capture" } as const;
+  }
+  return null;
+}
+
 export function Topbar({ onOpenMobileNav }: TopbarProps) {
+  const pathname = usePathname();
   const [email, setEmail] = useState<string | null>(null);
+  const [role, setRole] = useState<AppRole | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const configured = isSupabaseConfigured();
+  const primaryAction = getTopbarPrimaryAction(role, pathname ?? "/");
+
+  useEffect(() => {
+    fetchCurrentProfile()
+      .then((profile) => setRole((profile?.role as AppRole | null) ?? null))
+      .catch(() => setRole(null));
+  }, []);
 
   useEffect(() => {
     if (!configured) {
@@ -81,12 +104,14 @@ export function Topbar({ onOpenMobileNav }: TopbarProps) {
             Print
           </Button>
 
-          <a
-            className="inline-flex h-11 items-center justify-center rounded-xl bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800"
-            href={appPath("/shift-reports/new/")}
-          >
-            New Shift Report
-          </a>
+          {primaryAction ? (
+            <a
+              className="inline-flex h-11 items-center justify-center rounded-xl bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800"
+              href={primaryAction.href}
+            >
+              {primaryAction.label}
+            </a>
+          ) : null}
 
           {!configured ? (
             <a className="inline-flex h-11 items-center justify-center rounded-xl border px-4 text-sm font-medium" href={appPath("/login/")}>Setup</a>

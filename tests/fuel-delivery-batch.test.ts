@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildFuelDeliveryBatchPayload, normalizeDeliveryProductCode } from "@/lib/data/fuel-deliveries";
+import { buildFuelDeliveryBatchPayload, mapStationAssignmentFetchError, normalizeDeliveryProductCode } from "@/lib/data/fuel-deliveries";
 
 describe("fuel delivery batch", () => {
   it("requires station", () => {
@@ -50,5 +50,14 @@ describe("fuel delivery batch", () => {
 
     expect(payload.station_id).toBe("station-1");
     expect(payload.items[0]).toMatchObject({ product_code: "DIESEL", liters: 123.4, unit_cost: 2.5 });
+  });
+
+  it("maps missing station assignment RPC/table errors to migration guidance", () => {
+    const mapped = mapStationAssignmentFetchError({
+      code: "PGRST202",
+      message: "Could not find the function public.fuel_get_my_station_assignments in the schema cache"
+    });
+
+    expect(mapped?.message).toBe("Station assignment setup is missing. Owner must run the latest Supabase migration.");
   });
 });
