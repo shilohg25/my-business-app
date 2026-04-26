@@ -31,6 +31,6 @@ describe("field capture analytics", () => {
 
   it("handles missing arrays in summary", () => {
     const result = buildFieldCaptureReviewSummary({});
-    expect(result.totals.totalCashCount).toBe(0);
+    expect(result.totals.actualCashCount).toBe(0);
   });
 });

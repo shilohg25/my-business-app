@@ -19,17 +19,17 @@ describe("field capture review", () => {
   });
 
   it("supports discrepancy labeling directions", () => {
-    const overage = buildFieldCaptureReviewSummary({ cash_count: [{ denomination: 100, quantity: 2 }], meter_readings: [{ opening_reading: 0, closing_reading: 100 }] });
-    expect(overage.totals.discrepancy > 0).toBe(true);
-    const shortage = buildFieldCaptureReviewSummary({ cash_count: [{ denomination: 1, quantity: 1 }], meter_readings: [{ opening_reading: 0, closing_reading: 100 }] });
-    expect(shortage.totals.discrepancy < 0).toBe(true);
-    const balanced = buildFieldCaptureReviewSummary({ cash_count: [{ denomination: 100, quantity: 1 }], meter_readings: [{ opening_reading: 0, closing_reading: 100 }] });
-    expect(balanced.totals.discrepancy).toBe(0);
+    const overage = buildFieldCaptureReviewSummary({ cash_count: [{ denomination: 100, quantity: 2 }], meter_readings: [{ product: "Diesel", opening_reading: 0, closing_reading: 100 }], prices: { DIESEL: 1 } });
+    expect(overage.totals.discrepancyAmount > 0).toBe(true);
+    const shortage = buildFieldCaptureReviewSummary({ cash_count: [{ denomination: 1, quantity: 1 }], meter_readings: [{ product: "Diesel", opening_reading: 0, closing_reading: 100 }], prices: { DIESEL: 1 } });
+    expect(shortage.totals.discrepancyAmount < 0).toBe(true);
+    const balanced = buildFieldCaptureReviewSummary({ cash_count: [{ denomination: 100, quantity: 1 }], meter_readings: [{ product: "Diesel", opening_reading: 0, closing_reading: 100 }], prices: { DIESEL: 1 } });
+    expect(balanced.totals.discrepancyAmount).toBe(0);
   });
 
   it("handles missing arrays in payload", () => {
     const result = buildFieldCaptureReviewSummary(undefined);
-    expect(result.totals.totalCreditAmount).toBe(0);
+    expect(result.totals.creditAmount).toBe(0);
   });
 
   it("uses review query param URL", () => {

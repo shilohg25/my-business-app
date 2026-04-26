@@ -131,6 +131,50 @@ export async function fetchCaptureSessionPhotos(id: string) {
 }
 
 
+export interface FieldCapturePricingMap {
+  DIESEL: number | null;
+  SPECIAL: number | null;
+  UNLEADED: number | null;
+}
+
+function toEodIso(reportDate?: string) {
+  if (!reportDate) return new Date().toISOString();
+  return new Date(`${reportDate}T23:59:59.999Z`).toISOString();
+}
+
+function normalizeFuelProductCode(code: string | null | undefined): keyof FieldCapturePricingMap | null {
+  const text = String(code ?? "").trim().toUpperCase();
+  if (["ADO", "DIESEL"].includes(text)) return "DIESEL";
+  if (["SPU", "SPECIAL"].includes(text)) return "SPECIAL";
+  if (["ULG", "UNLEADED", "REGULAR"].includes(text)) return "UNLEADED";
+  return null;
+}
+
+export async function fetchFieldCapturePricing(stationId: string, reportDate?: string): Promise<FieldCapturePricingMap> {
+  if (!stationId) return { DIESEL: null, SPECIAL: null, UNLEADED: null };
+  const supabase = requireSupabase();
+  const eodIso = toEodIso(reportDate);
+  const { data, error } = await supabase
+    .from("fuel_prices")
+    .select("price, effective_at, fuel_products(code)")
+    .eq("station_id", stationId)
+    .lte("effective_at", eodIso)
+    .order("effective_at", { ascending: false })
+    .limit(200);
+
+  if (error) throw getRpcError("Unable to load field capture fuel prices", error);
+
+  const prices: FieldCapturePricingMap = { DIESEL: null, SPECIAL: null, UNLEADED: null };
+  for (const row of data ?? []) {
+    const product = normalizeFuelProductCode((row as { fuel_products?: { code?: string | null } | null }).fuel_products?.code);
+    if (!product || prices[product] !== null) continue;
+    const parsed = Number((row as { price?: number }).price);
+    prices[product] = Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return prices;
+}
+
 export async function publishShiftCaptureSession(captureSessionId: string) {
   const supabase = requireSupabase();
   const { data, error } = await supabase.rpc("fuel_publish_shift_capture_session", {

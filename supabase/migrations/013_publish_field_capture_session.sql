@@ -342,29 +342,32 @@ begin
     total_fuel_delivery_liters := total_fuel_delivery_liters + delivery_liters;
   end loop;
 
-  if session_row.calculated_summary is not null and session_row.calculated_summary <> '{}'::jsonb then
-    report_totals := session_row.calculated_summary;
-  else
-    expected_cash := total_lubricant_sales - total_credit_amount - total_expenses;
-    discrepancy_value := total_cash_count - expected_cash;
+  if coalesce(public.fuel_jsonb_text(draft_payload_value->'prices'->'DIESEL', null), '') = ''
+    and coalesce(public.fuel_jsonb_text(draft_payload_value->'prices'->'SPECIAL', null), '') = ''
+    and coalesce(public.fuel_jsonb_text(draft_payload_value->'prices'->'UNLEADED', null), '') = '' then
     publish_warnings := publish_warnings || to_jsonb('Fuel prices unavailable; fuel sales cash not computed.'::text);
-
-    report_totals := jsonb_build_object(
-      'meter_liters_out_by_product', meter_liters_out_by_product,
-      'total_meter_liters_out', total_meter_liters_out,
-      'cash_count_total', total_cash_count,
-      'expenses_total', total_expenses,
-      'credit_total', total_credit_amount,
-      'lubricant_sales_total', total_lubricant_sales,
-      'fuel_delivery_liters_total', total_fuel_delivery_liters,
-      'publish_warnings', publish_warnings,
-      'source_capture_session_id', session_row.id,
-      'expected_cash', expected_cash,
-      'discrepancy_amount', discrepancy_value
-    );
   end if;
 
-  discrepancy_value := coalesce((report_totals->>'discrepancy_amount')::numeric, total_cash_count - (total_lubricant_sales - total_credit_amount - total_expenses));
+  expected_cash := total_lubricant_sales - total_credit_amount - total_expenses;
+  discrepancy_value := total_cash_count - expected_cash;
+
+  report_totals := jsonb_build_object(
+    'prices', coalesce(draft_payload_value->'prices', '{}'::jsonb),
+    'fuel_sales_amount', coalesce((session_row.calculated_summary->>'fuelSalesAmount')::numeric, 0),
+    'lubricant_sales_amount', coalesce((session_row.calculated_summary->>'lubricantSalesAmount')::numeric, total_lubricant_sales),
+    'credit_amount', coalesce((session_row.calculated_summary->>'creditAmount')::numeric, total_credit_amount),
+    'expenses_amount', coalesce((session_row.calculated_summary->>'expensesAmount')::numeric, total_expenses),
+    'actual_cash_count', coalesce((session_row.calculated_summary->>'actualCashCount')::numeric, total_cash_count),
+    'expected_cash_remittance', coalesce((session_row.calculated_summary->>'expectedCashRemittance')::numeric, expected_cash),
+    'discrepancy_amount', coalesce((session_row.calculated_summary->>'discrepancyAmount')::numeric, discrepancy_value),
+    'warnings', publish_warnings,
+    'source_capture_session_id', session_row.id,
+    'meter_liters_out_by_product', meter_liters_out_by_product,
+    'total_meter_liters_out', total_meter_liters_out,
+    'fuel_delivery_liters_total', total_fuel_delivery_liters
+  );
+
+  discrepancy_value := coalesce((report_totals->>'discrepancy_amount')::numeric, discrepancy_value);
 
   insert into public.fuel_shift_reports (
     station_id,

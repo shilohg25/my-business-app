@@ -95,14 +95,22 @@ function ReviewInner() {
     </section>
 
     <section className="rounded border bg-white p-3 grid sm:grid-cols-2 gap-2">
-      <p>Meter liters out: {summary.totals.netMeterLitersOut.toFixed(2)}</p>
-      <p>Cash count total: {summary.totals.totalCashCount.toFixed(2)}</p>
-      <p>Expenses total: {summary.totals.totalExpenses.toFixed(2)}</p>
-      <p>Credit receipts total: {summary.totals.totalCreditAmount.toFixed(2)}</p>
-      <p>Lubricant sales total: {summary.totals.totalLubricantSales.toFixed(2)}</p>
+      <p>Fuel sales: {summary.totals.fuelSalesAmount.toFixed(2)}</p>
+      <p>Actual cash counted: {summary.totals.actualCashCount.toFixed(2)}</p>
+      <p>Expenses: {summary.totals.expensesAmount.toFixed(2)}</p>
+      <p>Credit sales: {summary.totals.creditAmount.toFixed(2)}</p>
+      <p>Lubricant sales: {summary.totals.lubricantSalesAmount.toFixed(2)}</p>
       <p>Fuel delivery liters: {summary.totals.totalFuelDeliveriesLiters.toFixed(2)}</p>
-      <p>Expected cash: {summary.totals.expectedCash.toFixed(2)}</p>
-      <p>Discrepancy: {summary.totals.discrepancy.toFixed(2)}</p>
+      <p>Expected cash remittance: {summary.totals.expectedCashRemittance.toFixed(2)}</p>
+      <p>Discrepancy: {summary.totals.discrepancyAmount.toFixed(2)} ({summary.discrepancy.label})</p>
+    </section>
+
+
+    <section className="rounded border bg-white p-3"><p className="font-semibold">Fuel pricing breakdown</p>
+      {(["DIESEL", "SPECIAL", "UNLEADED"] as const).map((product) => {
+        const row = summary.byProduct[product];
+        return <p key={product}>{product}: {row.litersOut.toFixed(2)} × {row.price === null ? "Missing price" : row.price.toFixed(4)} = {row.salesAmount.toFixed(2)}</p>;
+      })}
     </section>
 
     <section className="rounded border bg-white p-3"><p className="font-semibold">Warnings</p>
