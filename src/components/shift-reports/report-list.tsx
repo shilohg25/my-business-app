@@ -139,7 +139,7 @@ export function ReportList() {
   );
 
   return (
-    <div className="rounded-2xl border bg-white p-5">
+    <div className="rounded-2xl border bg-white p-4 sm:p-5">
       {!liveData ? (
         <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
           Shift reports cannot load until Supabase is configured. {config.reason}
@@ -152,7 +152,7 @@ export function ReportList() {
       {!loading ? (
         <div className="mb-4 flex flex-wrap items-end gap-3">
           <Input aria-label="Search by duty cashier" placeholder="Search duty/cashier or shift" value={searchText} onChange={(event) => setSearchText(event.target.value)} />
-          <select className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm" value={stationFilter} onChange={(event) => setStationFilter(event.target.value)}>
+          <select className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm sm:w-auto" value={stationFilter} onChange={(event) => setStationFilter(event.target.value)}>
             <option value="all">All stations</option>
             {stationOptions.map((name) => (
               <option key={name} value={name}>
@@ -160,7 +160,7 @@ export function ReportList() {
               </option>
             ))}
           </select>
-          <select className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as ReportStatusFilter)}>
+          <select className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm sm:w-auto" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as ReportStatusFilter)}>
             <option value="all">All statuses</option><option value="draft">Draft</option><option value="submitted">Submitted</option><option value="reviewed">Reviewed</option><option value="approved">Approved</option>
           </select>
           <Input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
@@ -181,7 +181,7 @@ export function ReportList() {
 
       {!loading && filteredReports.length > 0 ? (
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[980px] text-sm">
             <thead className="text-left text-slate-500">
               <tr>
                 <th className="py-2">Date</th>

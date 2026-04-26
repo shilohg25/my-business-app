@@ -54,10 +54,10 @@ export function AuditLogList() {
   }
 
   return (
-    <div className="rounded-2xl border bg-white p-5">
+    <div className="rounded-2xl border bg-white p-4 sm:p-5">
       {error ? <p className="mb-4 text-sm text-red-700">{error}</p> : null}
       <div className="mb-4 flex flex-wrap items-end gap-2">
-        <select className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm" value={actorFilter} onChange={(event) => setActorFilter(event.target.value)}>
+        <select className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm sm:w-auto" value={actorFilter} onChange={(event) => setActorFilter(event.target.value)}>
           <option value="all">All actors</option>
           {actorOptions.map((actor) => (
             <option key={actor} value={actor}>
@@ -65,7 +65,7 @@ export function AuditLogList() {
             </option>
           ))}
         </select>
-        <select className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm" value={actionFilter} onChange={(event) => setActionFilter(event.target.value)}>
+        <select className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm sm:w-auto" value={actionFilter} onChange={(event) => setActionFilter(event.target.value)}>
           <option value="all">All actions</option>
           {actionOptions.map((action) => (
             <option key={action} value={action}>
@@ -73,7 +73,7 @@ export function AuditLogList() {
             </option>
           ))}
         </select>
-        <select className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm" value={entityFilter} onChange={(event) => setEntityFilter(event.target.value)}>
+        <select className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm sm:w-auto" value={entityFilter} onChange={(event) => setEntityFilter(event.target.value)}>
           <option value="all">All entities</option>
           {entityOptions.map((entity) => (
             <option key={entity} value={entity}>
@@ -89,7 +89,7 @@ export function AuditLogList() {
       {logs.length === 0 ? <p className="text-sm text-slate-500">No fuel operation audit logs yet.</p> : null}
       {filteredLogs.length > 0 ? (
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[760px] text-sm">
             <thead className="text-left text-slate-500"><tr><th className="py-2">Time</th><th>Role</th><th>Action</th><th>Entity</th><th>Details</th></tr></thead>
             <tbody>{filteredLogs.map((log) => <tr className="border-t" key={log.id}><td className="py-3">{new Date(log.created_at).toLocaleString()}</td><td>{log.actor_role ?? "-"}</td><td>{log.action_type}</td><td>{log.entity_type}</td><td>{log.details ?? log.explanation ?? "-"}</td></tr>)}</tbody>
           </table>

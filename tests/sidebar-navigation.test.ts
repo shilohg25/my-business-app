@@ -8,9 +8,21 @@ describe("sidebar navigation", () => {
     expect(labels).not.toContain("Shift Setup");
   });
 
-  it("includes key operations routes", () => {
-    expect(labels).toContain("Field Shift Capture");
-    expect(labels).toContain("Bodega Inventory");
-    expect(labels).toContain("Fuel Inventory");
+  it("includes all expected operations links", () => {
+    expect(labels).toEqual(
+      expect.arrayContaining([
+        "Dashboard",
+        "Stations",
+        "Daily Shift Reports",
+        "Field Shift Capture",
+        "Expenses",
+        "Bodega Inventory",
+        "Station Lubricants",
+        "Fuel Inventory",
+        "Management Reports",
+        "Audit Logs",
+        "Settings"
+      ])
+    );
   });
 });

@@ -57,7 +57,7 @@ export function UsersAndRolesClient() {
         {isOwner ? (
           <>
             <div className="mt-3 overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full min-w-[900px] text-sm">
                 <thead><tr><th>Email</th><th>Username</th><th>Role</th><th>Active</th><th>Must change password</th><th>Last sign-in</th><th>Actions</th></tr></thead>
                 <tbody>
                   {users.map((user) => (
@@ -65,14 +65,14 @@ export function UsersAndRolesClient() {
                       <td>{user.email}</td>
                       <td>{user.username ?? "-"}</td>
                       <td>
-                        <select defaultValue={user.role ?? "User"} onChange={(e) => user.role = e.target.value as AppRole} className="rounded border px-2 py-1">
+                        <select defaultValue={user.role ?? "User"} onChange={(e) => user.role = e.target.value as AppRole} className="h-10 rounded border px-2 py-1">
                           {roles.map((r) => <option key={r} value={r}>{r}</option>)}
                         </select>
                       </td>
                       <td><input type="checkbox" defaultChecked={user.is_active} onChange={(e) => user.is_active = e.target.checked} /></td>
                       <td><input type="checkbox" defaultChecked={user.must_change_password} onChange={(e) => user.must_change_password = e.target.checked} /></td>
                       <td>{user.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleString() : "Never"}</td>
-                      <td className="space-x-2">
+                      <td className="flex flex-wrap gap-2">
                         <Button size="sm" onClick={async () => {
                           try {
                             await updateUserRole(user.id, (user.role ?? "User") as AppRole, user.is_active, user.must_change_password);
@@ -103,11 +103,11 @@ export function UsersAndRolesClient() {
               <p className="text-sm text-slate-500">Create or invite the user first in Supabase Authentication. This app safely assigns the business role after the Auth account exists.</p>
               <div className="grid gap-2 md:grid-cols-4">
                 <Input placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
-                <select className="rounded border px-2 py-1" value={role} onChange={(e) => setRole(e.target.value as AppRole)}>
+                <select className="h-10 rounded border px-2 py-1" value={role} onChange={(e) => setRole(e.target.value as AppRole)}>
                   {roles.map((r) => <option key={r} value={r}>{r}</option>)}
                 </select>
-                <label className="text-sm"><input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} /> Active</label>
-                <label className="text-sm"><input type="checkbox" checked={mustChange} onChange={(e) => setMustChange(e.target.checked)} /> Must change password</label>
+                <label className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} /> Active</label>
+                <label className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" checked={mustChange} onChange={(e) => setMustChange(e.target.checked)} /> Must change password</label>
               </div>
               <Button onClick={async () => {
                 try {

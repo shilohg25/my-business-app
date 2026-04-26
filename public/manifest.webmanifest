@@ -1,0 +1,17 @@
+{
+  "name": "AKY Fuel Ops",
+  "short_name": "AKY Fuel",
+  "start_url": "/my-business-app/",
+  "scope": "/my-business-app/",
+  "display": "standalone",
+  "theme_color": "#0f172a",
+  "background_color": "#f8fafc",
+  "icons": [
+    {
+      "src": "/my-business-app/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

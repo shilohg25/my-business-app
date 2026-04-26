@@ -32,10 +32,10 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
-      <Card className="w-full max-w-md">
+    <main className="flex min-h-screen items-center justify-center bg-slate-50 p-4 sm:p-6">
+      <Card className="w-full max-w-md rounded-2xl">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-3 h-20 w-20 overflow-hidden rounded-full border bg-white p-1">
+          <div className="mx-auto mb-3 h-16 w-16 sm:h-20 sm:w-20 overflow-hidden rounded-full border bg-white p-1">
   <img src={appPath("/logo.png")} alt="AKY logo" className="h-full w-full object-contain" />
 </div>
           <CardTitle>Sign in</CardTitle>
