@@ -1,17 +1,13 @@
-import { Card, CardContent } from "@/components/ui/card";
+import { UsersAndRolesClient } from "@/components/settings/users-and-roles-client";
 
 export default function Page() {
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-        <p className="text-sm text-slate-500">Role-aware application settings and report header configuration.</p>
+        <p className="text-sm text-slate-500">Role-aware application settings and user access management.</p>
       </div>
-      <Card>
-        <CardContent>
-          <p className="text-sm text-slate-500">Module route is scaffolded. Add server data access and forms in this directory.</p>
-        </CardContent>
-      </Card>
+      <UsersAndRolesClient />
     </div>
   );
 }

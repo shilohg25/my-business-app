@@ -20,6 +20,10 @@ describe("fuel inventory opening baseline analytics", () => {
     expect(getBaselineStatusForStation("s1", [])).toBe("missing");
   });
 
+  it("draft baseline status", () => {
+    expect(getBaselineStatusForStation("s1", [{ station_id: "s1", status: "draft", baseline_at: "2026-04-01T00:00:00Z" }])).toBe("draft");
+  });
+
   it("finalized baseline status", () => {
     expect(getBaselineStatusForStation("s1", [{ station_id: "s1", status: "finalized", baseline_at: "2026-04-01T00:00:00Z" }])).toBe("finalized");
   });
@@ -28,6 +32,7 @@ describe("fuel inventory opening baseline analytics", () => {
     expect(normalizeFuelProductCode("ADO")).toBe("DIESEL");
     expect(normalizeFuelProductCode("SPU")).toBe("SPECIAL");
     expect(normalizeFuelProductCode("ULG")).toBe("UNLEADED");
+    expect(normalizeFuelProductCode("REGULAR")).toBe("UNLEADED");
   });
 
   it("baseline does not count as meter liters out", () => {

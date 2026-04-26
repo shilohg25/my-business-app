@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { canUseLiveData } from "@/lib/data/client";
-import { createSupabaseBrowserClient, getSupabaseConfigurationState } from "@/lib/supabase/client";
+import { getSupabaseConfigurationState } from "@/lib/supabase/client";
 import {
   createFuelOpeningBaseline,
   fetchFuelInventoryDashboard,
@@ -15,6 +15,7 @@ import {
   recordTankReading,
   voidFuelOpeningBaseline
 } from "@/lib/data/fuel-inventory";
+import { fetchCurrentProfile } from "@/lib/data/profile";
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -101,12 +102,8 @@ export function FuelInventoryClient() {
     setError(null);
 
     const loadRole = async () => {
-      const supabase = createSupabaseBrowserClient();
-      const auth = await supabase.auth.getUser();
-      const userId = auth.data.user?.id;
-      if (!userId) return null;
-      const profile = await supabase.from("profiles").select("role").eq("id", userId).single();
-      return (profile.data as { role?: string } | null)?.role ?? null;
+      const profile = await fetchCurrentProfile();
+      return profile?.role ?? null;
     };
 
     Promise.all([reload(), loadRole()])
@@ -210,7 +207,7 @@ export function FuelInventoryClient() {
           </div>
           <div className="grid gap-2 md:grid-cols-3"><Input type="number" step="0.001" placeholder="Diesel remaining liters" value={dieselOpening} onChange={(e) => setDieselOpening(e.target.value)} /><Input type="number" step="0.001" placeholder="Special remaining liters" value={specialOpening} onChange={(e) => setSpecialOpening(e.target.value)} /><Input type="number" step="0.001" placeholder="Unleaded remaining liters" value={unleadedOpening} onChange={(e) => setUnleadedOpening(e.target.value)} /></div>
           {meterRows.map((row, index) => <div className="grid gap-2 md:grid-cols-5" key={`meter-${index}`}><Input placeholder="Pump label" value={row.pump_label} onChange={(e) => setMeterRows((prev) => prev.map((x, i) => i === index ? { ...x, pump_label: e.target.value } : x))} /><select className="rounded-md border px-3 py-2 text-sm" value={row.product_code} onChange={(e) => setMeterRows((prev) => prev.map((x, i) => i === index ? { ...x, product_code: e.target.value } : x))}><option>DIESEL</option><option>SPECIAL</option><option>UNLEADED</option></select><Input placeholder="Nozzle label" value={row.nozzle_label} onChange={(e) => setMeterRows((prev) => prev.map((x, i) => i === index ? { ...x, nozzle_label: e.target.value } : x))} /><Input type="number" step="0.001" placeholder="Current meter reading" value={row.opening_meter_reading} onChange={(e) => setMeterRows((prev) => prev.map((x, i) => i === index ? { ...x, opening_meter_reading: e.target.value } : x))} /><Input placeholder="Notes" value={row.notes} onChange={(e) => setMeterRows((prev) => prev.map((x, i) => i === index ? { ...x, notes: e.target.value } : x))} /></div>)}
-          <div className="flex gap-2"><Button variant="outline" onClick={() => setMeterRows((prev) => [...prev, { pump_label: "", product_code: "DIESEL", nozzle_label: "", opening_meter_reading: "0", notes: "" }])}>Add meter row</Button><Button onClick={() => handleSaveBaseline(false)}>Save draft baseline</Button><Button disabled={role !== "Owner"} onClick={() => handleSaveBaseline(true)}>Finalize baseline</Button></div>
+          <div className="flex gap-2"><Button variant="outline" onClick={() => setMeterRows((prev) => [...prev, { pump_label: "", product_code: "DIESEL", nozzle_label: "", opening_meter_reading: "0", notes: "" }])}>Add meter row</Button><Button onClick={() => handleSaveBaseline(false)}>Save draft baseline</Button><Button disabled={role !== "Owner"} onClick={() => handleSaveBaseline(true)}>Finalize baseline</Button></div>{role !== "Owner" ? <p className="text-sm text-amber-700">Only Owner profiles can finalize opening baselines.</p> : null}
         </CardContent>
       </Card>
 

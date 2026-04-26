@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { canUseLiveData } from "@/lib/data/client";
 import { appPath, getSupabaseConfigurationState } from "@/lib/supabase/client";
-import { createStationViaRpc, fetchStationManagementData, type StationManagementRow } from "@/lib/data/stations";
+import { createStation, fetchStationManagementData, type StationManagementRow } from "@/lib/data/stations";
 
 export function StationsClient() {
   const liveData = canUseLiveData();
@@ -16,6 +16,7 @@ export function StationsClient() {
   const [role, setRole] = useState<string | null>(null);
   const [canCreateStation, setCanCreateStation] = useState(false);
   const [loading, setLoading] = useState(liveData);
+  const [roleChecking, setRoleChecking] = useState(liveData);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -34,6 +35,7 @@ export function StationsClient() {
     setStations(data.rows);
     setRole(data.role);
     setCanCreateStation(data.canCreateStation);
+    setRoleChecking(false);
   };
 
   useEffect(() => {
@@ -43,6 +45,7 @@ export function StationsClient() {
     }
 
     setLoading(true);
+    setRoleChecking(true);
     setError(null);
 
     reload()
@@ -58,7 +61,7 @@ export function StationsClient() {
     setError(null);
     setMessage(null);
     try {
-      const created = await createStationViaRpc({
+      const created = await createStation({
         code,
         name,
         address,
@@ -89,10 +92,11 @@ export function StationsClient() {
       {error ? <p className="text-sm text-red-700">{error}</p> : null}
       {message ? <p className="text-sm text-emerald-700">{message}</p> : null}
       {loading ? <p className="text-sm text-slate-500">Loading stations...</p> : null}
+      {roleChecking ? <p className="text-sm text-slate-500">Checking role...</p> : null}
 
       <div className="rounded-2xl border bg-white p-5">
         <h2 className="text-lg font-semibold">Add station</h2>
-        {!canCreateStation ? <p className="mt-2 text-sm text-amber-700">Only Owner can create stations. Current role: {role ?? "Unknown"}.</p> : null}
+        {!canCreateStation && !roleChecking ? <p className="mt-2 text-sm text-amber-700">{role ? "Only Owner profiles can create stations." : "No active profile found for this login."}</p> : null}
         <form className="mt-3 space-y-2" onSubmit={submitCreateStation}>
           <div className="grid gap-2 md:grid-cols-2">
             <Input placeholder="Code" value={code} onChange={(e) => setCode(e.target.value)} required />

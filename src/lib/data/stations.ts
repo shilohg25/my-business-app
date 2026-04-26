@@ -1,5 +1,6 @@
 import { canUseLiveData } from "@/lib/data/client";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { fetchCurrentProfile } from "@/lib/data/profile";
 
 export interface StationManagementRow {
   id: string;
@@ -27,22 +28,19 @@ export async function fetchStationManagementData(): Promise<StationManagementRes
   if (!canUseLiveData()) return { role: null, canCreateStation: false, rows: [] };
 
   const supabase = createSupabaseBrowserClient();
-  const authResult = await supabase.auth.getUser();
-  const userId = authResult.data.user?.id ?? null;
-
-  const [stationsResult, roleResult] = await Promise.all([
+  const [stationsResult, profile] = await Promise.all([
     supabase
       .from("fuel_stations")
       .select("id, code, name, address, is_active")
       .order("name", { ascending: true }),
-    userId ? supabase.from("profiles").select("role").eq("id", userId).single() : Promise.resolve({ data: null, error: null })
+    fetchCurrentProfile()
   ]);
 
   if (stationsResult.error) throw stationsResult.error;
 
   const stations = (stationsResult.data ?? []) as Array<{ id: string; code: string; name: string; address: string | null; is_active: boolean }>;
   if (stations.length === 0) {
-    return { role: (roleResult.data as { role?: string } | null)?.role ?? null, canCreateStation: ((roleResult.data as { role?: string } | null)?.role ?? null) === "Owner", rows: [] };
+    return { role: profile?.role ?? null, canCreateStation: profile?.role === "Owner", rows: [] };
   }
 
   const ids = stations.map((station) => station.id);
@@ -78,7 +76,7 @@ export async function fetchStationManagementData(): Promise<StationManagementRes
   });
 
   const baselineProducts = (baselineProductsResult.data ?? []) as Array<{ baseline_id: string; station_id: string; product_code_snapshot: string }>;
-  const role = (roleResult.data as { role?: string } | null)?.role ?? null;
+  const role = profile?.role ?? null;
 
   return {
     role,
@@ -97,7 +95,7 @@ export async function fetchStationManagementData(): Promise<StationManagementRes
   };
 }
 
-export async function createStationViaRpc(payload: {
+export async function createStation(payload: {
   code: string;
   name: string;
   address?: string;
