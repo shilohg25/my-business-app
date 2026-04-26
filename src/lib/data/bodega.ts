@@ -55,8 +55,10 @@ export async function fetchBodegaData(): Promise<BodegaDataResult> {
 }
 
 export async function createBodega(payload: { name: string; address?: string; notes?: string }) {
+  if (!canUseLiveData()) throw new Error("Supabase is not configured");
+
   const supabase = createSupabaseBrowserClient();
   const { data, error } = await supabase.rpc("fuel_create_bodega", { payload });
-  if (error) throw error;
+  if (error) throw new Error(`Unable to create bodega: ${error.message}`);
   return data as string;
 }
