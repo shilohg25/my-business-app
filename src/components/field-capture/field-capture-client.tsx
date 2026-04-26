@@ -11,6 +11,12 @@ import {
   type FuelShiftCaptureSessionRow
 } from "@/lib/data/field-capture";
 import {
+  listCaptureSessionPhotos,
+  uploadCapturePhotoFile,
+  type CapturePhotoType,
+  type FuelShiftCapturePhotoRow
+} from "@/lib/data/field-capture-photos";
+import {
   calculateDraftCashTotal,
   calculateDraftCreditTotal,
   calculateDraftDiscrepancy,
@@ -28,6 +34,14 @@ const emptyCashRow = () => ({ denomination: "", quantity: "" });
 const emptyExpenseRow = () => ({ category: "", description: "", amount: "", receipt_reference: "" });
 const emptyCreditRow = () => ({ company_customer: "", receipt_number: "", product: "", liters: "", amount: "" });
 const emptyDeliveryRow = () => ({ product: "", liters_received: "", delivery_reference: "", supplier: "", notes: "" });
+const photoCards: Array<{ type: CapturePhotoType; label: string }> = [
+  { type: "meter_reading", label: "Meter reading photo" },
+  { type: "credit_receipt", label: "Credit receipt photo" },
+  { type: "expense_receipt", label: "Expense receipt photo" },
+  { type: "fuel_delivery_receipt", label: "Fuel delivery receipt photo" },
+  { type: "cash_count_evidence", label: "Cash count evidence" },
+  { type: "other", label: "Other" }
+];
 
 function parseDraftPayload(payload: Record<string, unknown> | null | undefined) {
   return {
@@ -54,6 +68,16 @@ export default function FieldCaptureClient() {
   const [expenses, setExpenses] = useState<Row[]>([emptyExpenseRow()]);
   const [creditReceipts, setCreditReceipts] = useState<Row[]>([emptyCreditRow()]);
   const [fuelDeliveries, setFuelDeliveries] = useState<Row[]>([emptyDeliveryRow()]);
+  const [capturePhotos, setCapturePhotos] = useState<FuelShiftCapturePhotoRow[]>([]);
+  const [selectedPhotoFiles, setSelectedPhotoFiles] = useState<Partial<Record<CapturePhotoType, File>>>({});
+  const [photoNotes, setPhotoNotes] = useState<Partial<Record<CapturePhotoType, string>>>({});
+  const [photoStatus, setPhotoStatus] = useState<Partial<Record<CapturePhotoType, string>>>({});
+  const [uploadingType, setUploadingType] = useState<CapturePhotoType | null>(null);
+
+  const loadPhotos = async (captureSessionId: string) => {
+    const rows = await listCaptureSessionPhotos(captureSessionId);
+    setCapturePhotos(rows);
+  };
 
   const loadInitialData = async () => {
     setLoading(true);
@@ -69,6 +93,9 @@ export default function FieldCaptureClient() {
         setExpenses(parsed.expenses);
         setCreditReceipts(parsed.credit_receipts);
         setFuelDeliveries(parsed.fuel_deliveries);
+        await loadPhotos(newest.id);
+      } else {
+        setCapturePhotos([]);
       }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to load field capture data.");
@@ -111,6 +138,7 @@ export default function FieldCaptureClient() {
       setExpenses(parsed.expenses);
       setCreditReceipts(parsed.credit_receipts);
       setFuelDeliveries(parsed.fuel_deliveries);
+      await loadPhotos(created.id);
       setMessage("Draft session started.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to start draft session.");
@@ -142,6 +170,7 @@ export default function FieldCaptureClient() {
       });
       const refreshed = await fetchCaptureSessionById(activeSession.id);
       setActiveSession(refreshed);
+      await loadPhotos(refreshed.id);
       setMessage("Draft saved.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to save draft.");
@@ -167,6 +196,48 @@ export default function FieldCaptureClient() {
   };
 
   const updateRow = (rows: Row[], idx: number, key: string, value: string) => rows.map((row, rowIndex) => (rowIndex === idx ? { ...row, [key]: value } : row));
+
+  const handlePhotoUpload = async (photoType: CapturePhotoType) => {
+    if (!activeSession || activeSession.status !== "draft") {
+      setPhotoStatus((current) => ({ ...current, [photoType]: "No active draft session for upload." }));
+      return;
+    }
+
+    const file = selectedPhotoFiles[photoType];
+    if (!file) {
+      setPhotoStatus((current) => ({ ...current, [photoType]: "Choose a file first." }));
+      return;
+    }
+
+    setUploadingType(photoType);
+    setPhotoStatus((current) => ({ ...current, [photoType]: "Uploading..." }));
+    try {
+      await uploadCapturePhotoFile({
+        captureSessionId: activeSession.id,
+        photoType,
+        file,
+        notes: photoNotes[photoType]
+      });
+      await loadPhotos(activeSession.id);
+      setPhotoStatus((current) => ({
+        ...current,
+        [photoType]:
+          "Photo uploaded. OCR extraction is not enabled yet. Cashier confirmation will be required before any OCR value can affect reports."
+      }));
+      setSelectedPhotoFiles((current) => {
+        const next = { ...current };
+        delete next[photoType];
+        return next;
+      });
+    } catch (error) {
+      setPhotoStatus((current) => ({
+        ...current,
+        [photoType]: error instanceof Error ? error.message : "Upload failed."
+      }));
+    } finally {
+      setUploadingType(null);
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -255,11 +326,61 @@ export default function FieldCaptureClient() {
             <button type="button" className="min-h-11 w-full rounded-xl bg-slate-900 text-white" onClick={saveDraft}>Save draft</button>
           </section>
 
-          <section className="rounded-2xl border bg-white p-4 space-y-2"><h2 className="font-semibold">8. Photo-assisted capture placeholder</h2>
-            <div className="rounded-xl border p-3">Meter photo upload: coming soon</div>
-            <div className="rounded-xl border p-3">Receipt photo upload: coming soon</div>
-            <div className="rounded-xl border p-3">Delivery receipt upload: coming soon</div>
-            <p className="text-sm text-slate-600">Photo capture and OCR-assisted confirmation will be added after secure storage policies are enabled.</p>
+          <section className="rounded-2xl border bg-white p-4 space-y-3"><h2 className="font-semibold">8. Secure photo evidence upload</h2>
+            {photoCards.map((card) => (
+              <div key={card.type} className="rounded-xl border p-3 space-y-2">
+                <p className="font-medium">{card.label}</p>
+                <input
+                  className="min-h-11 w-full rounded-lg border px-3 py-2"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  disabled={activeSession.status !== "draft" || uploadingType === card.type}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    setSelectedPhotoFiles((current) => {
+                      if (!file) {
+                        const next = { ...current };
+                        delete next[card.type];
+                        return next;
+                      }
+                      return { ...current, [card.type]: file };
+                    });
+                  }}
+                />
+                <input
+                  className="min-h-11 w-full rounded-lg border px-3"
+                  placeholder="Optional notes"
+                  value={photoNotes[card.type] ?? ""}
+                  onChange={(event) => setPhotoNotes((current) => ({ ...current, [card.type]: event.target.value }))}
+                  disabled={activeSession.status !== "draft" || uploadingType === card.type}
+                />
+                <button
+                  type="button"
+                  disabled={activeSession.status !== "draft" || uploadingType === card.type}
+                  className="min-h-11 w-full rounded-xl bg-slate-900 text-white disabled:opacity-60"
+                  onClick={() => void handlePhotoUpload(card.type)}
+                >
+                  {uploadingType === card.type ? "Uploading..." : "Upload photo"}
+                </button>
+                {photoStatus[card.type] ? <p className="text-sm text-slate-600">{photoStatus[card.type]}</p> : null}
+              </div>
+            ))}
+            <p className="text-sm text-slate-600">
+              Photo uploaded. OCR extraction is not enabled yet. Cashier confirmation will be required before any OCR value can affect reports.
+            </p>
+            <div className="rounded-xl border p-3 space-y-2">
+              <p className="font-medium">Uploaded photos for this session</p>
+              {capturePhotos.length === 0 ? <p className="text-sm text-slate-500">No photos uploaded yet.</p> : null}
+              {capturePhotos.map((photo) => (
+                <div key={photo.id} className="rounded-lg border p-2 text-sm space-y-1">
+                  <p>File: {photo.original_file_name ?? "Unnamed file"}</p>
+                  <p>Type: {photo.photo_type}</p>
+                  <p>Uploaded: {new Date(photo.created_at).toLocaleString()}</p>
+                  <p>OCR status: {photo.ocr_status === "not_started" ? "Not started" : photo.ocr_status}</p>
+                  {photo.notes ? <p>Notes: {photo.notes}</p> : null}
+                </div>
+              ))}
+            </div>
           </section>
 
           <section className="rounded-2xl border bg-white p-4 space-y-1 text-sm"><h2 className="font-semibold">9. Review summary</h2>
