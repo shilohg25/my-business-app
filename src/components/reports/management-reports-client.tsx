@@ -9,6 +9,8 @@ import { formatCurrency } from "@/lib/utils";
 import { formatSignedCurrency } from "@/lib/analytics/discrepancy";
 import { fetchLubricantControlData } from "@/lib/data/lubricants";
 import { fetchFuelInventoryDashboard } from "@/lib/data/fuel-inventory";
+import { fetchStationExpenses } from "@/lib/data/expenses";
+import { buildExpenseAnalytics } from "@/lib/analytics/expenses";
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -40,6 +42,7 @@ export function ManagementReportsClient() {
   const [result, setResult] = useState<Awaited<ReturnType<typeof fetchExecutiveAnalytics>> | null>(null);
   const [lubricants, setLubricants] = useState<Awaited<ReturnType<typeof fetchLubricantControlData>> | null>(null);
   const [fuelInventory, setFuelInventory] = useState<Awaited<ReturnType<typeof fetchFuelInventoryDashboard>> | null>(null);
+  const [expenseRows, setExpenseRows] = useState<Awaited<ReturnType<typeof fetchStationExpenses>>["rows"]>([]);
 
   useEffect(() => {
     if (!liveData) {
@@ -52,12 +55,18 @@ export function ManagementReportsClient() {
     setLoading(true);
     setError(null);
 
-    Promise.all([fetchExecutiveAnalytics({ startDate, endDate }), fetchLubricantControlData({ startDate, endDate }), fetchFuelInventoryDashboard({ startDate, endDate })])
-      .then(([analyticsData, lubricantData, fuelData]) => {
+    Promise.all([
+      fetchExecutiveAnalytics({ startDate, endDate }),
+      fetchLubricantControlData({ startDate, endDate }),
+      fetchFuelInventoryDashboard({ startDate, endDate }),
+      fetchStationExpenses({ startDate, endDate })
+    ])
+      .then(([analyticsData, lubricantData, fuelData, expenseData]) => {
         if (!active) return;
         setResult(analyticsData);
         setLubricants(lubricantData);
         setFuelInventory(fuelData);
+        setExpenseRows(expenseData.rows);
       })
       .catch((nextError: Error) => {
         if (!active) return;
@@ -81,6 +90,7 @@ export function ManagementReportsClient() {
   }, [result?.analytics.productLiters]);
 
   const totals = result?.analytics.totals;
+  const expenseAnalytics = useMemo(() => buildExpenseAnalytics(expenseRows), [expenseRows]);
 
   return (
     <div className="space-y-6">
@@ -152,6 +162,29 @@ export function ManagementReportsClient() {
         <Card>
           <CardHeader><CardTitle>Expenses by category</CardTitle></CardHeader>
           <CardContent><div className="overflow-x-auto"><table className="w-full text-sm"><thead className="text-left text-slate-500"><tr><th className="py-2">Category</th><th className="text-right">Count</th><th className="text-right">Amount</th></tr></thead><tbody>{(result?.analytics.expensesByCategory ?? []).map((row) => (<tr className="border-t" key={row.category}><td className="py-2">{row.category}</td><td className="text-right">{row.count}</td><td className="text-right">{formatCurrency(row.amount)}</td></tr>))}</tbody></table></div></CardContent>
+        </Card>
+      </div>
+
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Expense grouping note</CardTitle>
+          <CardDescription>Expenses are grouped by shift report date and station, not by technical created timestamp.</CardDescription>
+        </CardHeader>
+      </Card>
+
+      <div className="grid gap-4 xl:grid-cols-3">
+        <Card>
+          <CardHeader><CardTitle>Expenses by station</CardTitle></CardHeader>
+          <CardContent><div className="overflow-x-auto"><table className="w-full text-sm"><thead className="text-left text-slate-500"><tr><th className="py-2">Station</th><th className="text-right">Expense count</th><th className="text-right">Total expenses</th></tr></thead><tbody>{expenseAnalytics.byStation.map((row) => (<tr className="border-t" key={row.key}><td className="py-2">{row.station_name}</td><td className="text-right">{row.count}</td><td className="text-right">{formatCurrency(row.amount)}</td></tr>))}</tbody></table></div></CardContent>
+        </Card>
+        <Card>
+          <CardHeader><CardTitle>Monthly expenses by station</CardTitle></CardHeader>
+          <CardContent><div className="overflow-x-auto"><table className="w-full text-sm"><thead className="text-left text-slate-500"><tr><th className="py-2">Month</th><th>Station</th><th className="text-right">Total expenses</th></tr></thead><tbody>{expenseAnalytics.byMonth.map((row) => (<tr className="border-t" key={row.key}><td className="py-2">{row.month}</td><td>{row.station_name}</td><td className="text-right">{formatCurrency(row.amount)}</td></tr>))}</tbody></table></div></CardContent>
+        </Card>
+        <Card>
+          <CardHeader><CardTitle>Expenses by category</CardTitle></CardHeader>
+          <CardContent><div className="overflow-x-auto"><table className="w-full text-sm"><thead className="text-left text-slate-500"><tr><th className="py-2">Category</th><th className="text-right">Total expenses</th></tr></thead><tbody>{expenseAnalytics.byCategory.map((row) => (<tr className="border-t" key={row.key}><td className="py-2">{row.category}</td><td className="text-right">{formatCurrency(row.amount)}</td></tr>))}</tbody></table></div></CardContent>
         </Card>
       </div>
 

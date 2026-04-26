@@ -492,7 +492,7 @@ export function ReportDetail() {
           </SectionCard>
 
           <SectionCard title="Expenses" isEmpty={detail.expenses.length === 0} emptyMessage="No expenses recorded for this shift.">
-            <p className="mb-2 text-xs text-slate-500">Expense total: <span className="font-semibold text-slate-800">{formatCurrency(detail.expenses.reduce((sum, row) => sum + Number(row.amount ?? 0), 0))}</span></p>
+            <p className="mb-2 text-xs text-slate-500">Total expenses for this report: <span className="font-semibold text-slate-800">{formatCurrency(detail.expenses.reduce((sum, row) => sum + Number(row.amount ?? 0), 0))}</span></p>
             <DataTable
               headers={
                 <tr>
@@ -505,7 +505,7 @@ export function ReportDetail() {
             >
               {detail.expenses.map((row) => (
                 <tr className="border-t border-slate-100" key={row.id}>
-                  <td className="py-1.5">{row.category ?? "-"}</td>
+                  <td className="py-1.5">{row.category?.trim() || "Uncategorized"}</td>
                   <td className="py-1.5">{row.description}</td>
                   <td className="py-1.5">{row.receipt_reference ?? "-"}</td>
                   <td className="py-1.5 text-right tabular-nums">{formatCurrency(Number(row.amount ?? 0))}</td>

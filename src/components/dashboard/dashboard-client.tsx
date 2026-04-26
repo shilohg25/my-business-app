@@ -9,6 +9,8 @@ import { formatCurrency } from "@/lib/utils";
 import { formatSignedCurrency } from "@/lib/analytics/discrepancy";
 import { fetchLubricantControlData } from "@/lib/data/lubricants";
 import { fetchFuelInventoryDashboard } from "@/lib/data/fuel-inventory";
+import { fetchStationExpenses } from "@/lib/data/expenses";
+import { buildExpenseAnalytics } from "@/lib/analytics/expenses";
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -32,6 +34,7 @@ export function DashboardClient() {
   const [result, setResult] = useState<Awaited<ReturnType<typeof fetchExecutiveAnalytics>> | null>(null);
   const [lubricants, setLubricants] = useState<Awaited<ReturnType<typeof fetchLubricantControlData>> | null>(null);
   const [fuelInventory, setFuelInventory] = useState<Awaited<ReturnType<typeof fetchFuelInventoryDashboard>> | null>(null);
+  const [expenseRows, setExpenseRows] = useState<Awaited<ReturnType<typeof fetchStationExpenses>>["rows"]>([]);
 
   useEffect(() => {
     if (!liveData) {
@@ -47,13 +50,15 @@ export function DashboardClient() {
     Promise.all([
       fetchExecutiveAnalytics({ startDate: startOfMonthIso(), endDate: todayIso() }),
       fetchLubricantControlData({ startDate: startOfMonthIso(), endDate: todayIso() }),
-      fetchFuelInventoryDashboard()
+      fetchFuelInventoryDashboard(),
+      fetchStationExpenses({ startDate: startOfMonthIso(), endDate: todayIso() })
     ])
-      .then(([analyticsData, lubricantData, fuelData]) => {
+      .then(([analyticsData, lubricantData, fuelData, expenseData]) => {
         if (!active) return;
         setResult(analyticsData);
         setLubricants(lubricantData);
         setFuelInventory(fuelData);
+        setExpenseRows(expenseData.rows);
       })
       .catch((nextError: Error) => {
         if (!active) return;
@@ -70,6 +75,8 @@ export function DashboardClient() {
 
   const liters = useMemo(() => result?.analytics.productLiters ?? {}, [result?.analytics.productLiters]);
   const totals = result?.analytics.totals;
+  const expenseAnalytics = useMemo(() => buildExpenseAnalytics(expenseRows), [expenseRows]);
+  const topExpenseStation = expenseAnalytics.byStation[0] ?? null;
 
   return (
     <div className="space-y-6">
@@ -107,6 +114,8 @@ export function DashboardClient() {
         <Card><CardHeader><CardDescription>Special gross liters out</CardDescription><CardTitle>{formatLiters(liters.SPECIAL?.grossLitersOut ?? 0)}</CardTitle></CardHeader></Card>
         <Card><CardHeader><CardDescription>Unleaded gross liters out</CardDescription><CardTitle>{formatLiters(liters.UNLEADED?.grossLitersOut ?? 0)}</CardTitle></CardHeader></Card>
         <Card><CardHeader><CardDescription>Reports needing review</CardDescription><CardTitle>{totals?.pendingReviewCount ?? 0}</CardTitle></CardHeader></Card>
+        <Card><CardHeader><CardDescription>Expenses needing review</CardDescription><CardTitle>{totals?.pendingReviewCount ?? 0}</CardTitle></CardHeader></Card>
+        <Card><CardHeader><CardDescription>Top station by expenses</CardDescription><CardTitle>{topExpenseStation?.station_name ?? "-"}</CardTitle></CardHeader><CardContent className="pt-0 text-xs text-slate-500">{topExpenseStation ? formatCurrency(topExpenseStation.amount) : "No expense data"}</CardContent></Card>
         <Card><CardHeader><CardDescription>Fuel deliveries this month</CardDescription><CardTitle>{fuelInventory?.deliveries.length ?? 0}</CardTitle></CardHeader></Card>
         <Card><CardHeader><CardDescription>Diesel variance liters</CardDescription><CardTitle>{formatLiters(fuelInventory?.totals?.dieselVariance ?? 0)}</CardTitle></CardHeader></Card>
         <Card><CardHeader><CardDescription>Special variance liters</CardDescription><CardTitle>{formatLiters(fuelInventory?.totals?.specialVariance ?? 0)}</CardTitle></CardHeader></Card>
