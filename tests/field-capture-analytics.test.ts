@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildFieldCaptureReviewSummary,
   calculateDraftCashTotal,
   calculateDraftCreditTotal,
   calculateDraftExpensesTotal,
@@ -20,7 +21,7 @@ describe("field capture analytics", () => {
 
   it("sums expenses and credit amounts", () => {
     expect(calculateDraftExpensesTotal([{ amount: 100 }, { amount: 50.5 }])).toBe(150.5);
-    expect(calculateDraftCreditTotal([{ amount: 20 }, { amount: 30 }])).toBe(50);
+    expect(calculateDraftCreditTotal([{ amount: 20 }, { amount: 30 }]).totalAmount).toBe(50);
   });
 
   it("calculates net remittance", () => {
@@ -28,8 +29,8 @@ describe("field capture analytics", () => {
     expect(result).toBe(800);
   });
 
-  it("treats invalid numeric strings as 0", () => {
-    expect(calculateDraftCashTotal([{ denomination: "bad", quantity: "5" }])).toBe(0);
-    expect(calculateDraftExpensesTotal([{ amount: "bad" }])).toBe(0);
+  it("handles missing arrays in summary", () => {
+    const result = buildFieldCaptureReviewSummary({});
+    expect(result.totals.totalCashCount).toBe(0);
   });
 });
