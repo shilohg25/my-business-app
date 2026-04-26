@@ -1,48 +1,24 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-
-const setupSections = [
-  {
-    title: "Shift templates",
-    description: "Define names and time ranges such as 6am–2pm, 2pm–10pm, or 1pm–9pm."
-  },
-  {
-    title: "Station assignment",
-    description: "Assign shift templates to stations."
-  },
-  {
-    title: "Active/inactive control",
-    description: "Keep old shift templates for history while hiding them from new reports."
-  }
-];
+import { appPath } from "@/lib/supabase/client";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function Page() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Shift Setup</h1>
-        <p className="text-sm text-slate-500">Configure station shift templates and cashier schedule options.</p>
+        <h1 className="text-2xl font-semibold tracking-tight">Shift Setup Retired</h1>
+        <p className="text-sm text-slate-500">
+          Shift selection will be handled inside Field Shift Capture. Shift templates may later move to Settings.
+        </p>
       </div>
 
       <Card>
+        <CardHeader>
+          <CardTitle>Use Field Shift Capture</CardTitle>
+        </CardHeader>
         <CardContent>
-          <p className="text-sm text-slate-600">
-            Use this page to define shift templates and schedule options for your station operations. This page is for
-            setup only and is not where completed Daily Shift Reports are reviewed.
-          </p>
+          <a className="text-sm font-medium text-blue-700 underline" href={appPath("/field-capture/")}>Open Field Shift Capture</a>
         </CardContent>
       </Card>
-
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {setupSections.map((section) => (
-          <Card key={section.title}>
-            <CardHeader>
-              <CardTitle>{section.title}</CardTitle>
-              <CardDescription>{section.description}</CardDescription>
-            </CardHeader>
-            <CardContent className="pt-0 text-xs text-slate-500">Coming soon.</CardContent>
-          </Card>
-        ))}
-      </div>
     </div>
   );
 }

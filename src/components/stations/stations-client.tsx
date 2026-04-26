@@ -20,12 +20,9 @@ export function StationsClient() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
-  const [tin, setTin] = useState("");
-  const [businessPermit, setBusinessPermit] = useState("");
   const [header, setHeader] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -62,21 +59,15 @@ export function StationsClient() {
     setMessage(null);
     try {
       const created = await createStation({
-        code,
         name,
         address,
         phone,
-        tin,
-        business_permit: businessPermit,
         official_report_header: header
       });
       setMessage(`Station created. Station id: ${created.station_id}`);
-      setCode("");
       setName("");
       setAddress("");
       setPhone("");
-      setTin("");
-      setBusinessPermit("");
       setHeader("");
       await reload();
     } catch (err) {
@@ -96,17 +87,15 @@ export function StationsClient() {
 
       <div className="rounded-2xl border bg-white p-5">
         <h2 className="text-lg font-semibold">Add station</h2>
+        <p className="mt-1 text-sm text-slate-500">Station code is generated automatically from the station name.</p>
         {!canCreateStation && !roleChecking ? <p className="mt-2 text-sm text-amber-700">{role ? "Only Owner profiles can create stations." : "No active profile found for this login."}</p> : null}
         <form className="mt-3 space-y-2" onSubmit={submitCreateStation}>
           <div className="grid gap-2 md:grid-cols-2">
-            <Input placeholder="Code" value={code} onChange={(e) => setCode(e.target.value)} required />
-            <Input placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} required />
+            <Input placeholder="Station name" value={name} onChange={(e) => setName(e.target.value)} required />
             <Input placeholder="Address" value={address} onChange={(e) => setAddress(e.target.value)} />
             <Input placeholder="Phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
-            <Input placeholder="TIN" value={tin} onChange={(e) => setTin(e.target.value)} />
-            <Input placeholder="Business permit" value={businessPermit} onChange={(e) => setBusinessPermit(e.target.value)} />
+            <Input placeholder="Official report header" value={header} onChange={(e) => setHeader(e.target.value)} />
           </div>
-          <Input placeholder="Official report header" value={header} onChange={(e) => setHeader(e.target.value)} />
           <Button type="submit" disabled={submitting || !canCreateStation}>{submitting ? "Creating..." : "Create station"}</Button>
         </form>
       </div>
@@ -117,21 +106,20 @@ export function StationsClient() {
         {stations.length > 0 ? (
           <div className="mt-3 overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="text-left text-slate-500"><tr><th className="py-2">Code</th><th>Name</th><th>Address</th><th>Active</th><th className="text-right">Products configured</th><th className="text-right">Pumps count</th><th className="text-right">Shift templates count</th><th>Linked inventory location</th><th>Fuel baseline</th><th>DSP baseline present</th><th>Action</th></tr></thead>
+              <thead className="text-left text-slate-500"><tr><th className="py-2">Station</th><th>Address</th><th>Phone</th><th>Active</th><th>Fuel baseline status</th><th>Linked inventory location</th><th>Action</th></tr></thead>
               <tbody>
                 {stations.map((station) => (
                   <tr className="border-t" key={station.id}>
-                    <td className="py-2">{station.code}</td>
-                    <td>{station.name}</td>
+                    <td className="py-2">
+                      <div className="font-medium">{station.name}</div>
+                      <div className="text-xs text-slate-500">Code: {station.code}</div>
+                    </td>
                     <td>{station.address ?? "-"}</td>
+                    <td>{station.phone ?? "-"}</td>
                     <td><Badge>{station.is_active ? "Active" : "Inactive"}</Badge></td>
-                    <td className="text-right">{station.products_configured}</td>
-                    <td className="text-right">{station.pumps_count}</td>
-                    <td className="text-right">{station.shift_templates_count}</td>
-                    <td>{station.inventory_location_code ?? "-"}</td>
                     <td>{station.fuel_baseline_status}</td>
-                    <td>{station.has_diesel_baseline ? "D" : "-"}/{station.has_special_baseline ? "S" : "-"}/{station.has_unleaded_baseline ? "U" : "-"}</td>
-                    <td><a className="text-blue-700 underline" href={`${appPath("/inventory/fuel/")}?station_id=${station.id}`}>Set Fuel Opening Baseline</a></td>
+                    <td>{station.inventory_location_code ?? "-"}</td>
+                    <td><a className="text-blue-700 underline" href={`${appPath("/inventory/fuel/")}?station_id=${station.id}`}>View Fuel Inventory</a></td>
                   </tr>
                 ))}
               </tbody>

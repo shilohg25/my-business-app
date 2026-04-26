@@ -54,7 +54,7 @@ export async function fetchBodegaData(): Promise<BodegaDataResult> {
   return { locations, stations, inventory, products };
 }
 
-export async function createBodega(payload: { code: string; name: string; address?: string; notes?: string }) {
+export async function createBodega(payload: { name: string; address?: string; notes?: string }) {
   const supabase = createSupabaseBrowserClient();
   const { data, error } = await supabase.rpc("fuel_create_bodega", { payload });
   if (error) throw error;

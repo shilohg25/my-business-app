@@ -28,10 +28,10 @@ export function BodegaClient() {
   const [result, setResult] = useState<Awaited<ReturnType<typeof fetchBodegaData>> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [role, setRole] = useState<string | null>(null);
   const [isOwner, setIsOwner] = useState(false);
   const [roleChecking, setRoleChecking] = useState(liveData);
 
-  const [bodegaCode, setBodegaCode] = useState("");
   const [bodegaName, setBodegaName] = useState("");
   const [bodegaAddress, setBodegaAddress] = useState("");
   const [bodegaNotes, setBodegaNotes] = useState("");
@@ -51,6 +51,7 @@ export function BodegaClient() {
   const reload = async () => {
     if (!liveData) return;
     const [data, profile] = await Promise.all([fetchBodegaData(), fetchCurrentProfile()]);
+    setRole(profile?.role ?? null);
     setIsOwner(profile?.role === "Owner");
     setRoleChecking(false);
     setResult(data);
@@ -67,12 +68,25 @@ export function BodegaClient() {
     [result?.inventory, selectedBodegaId]
   );
 
+  const bodegaSummaries = useMemo(() => {
+    const rows = result?.inventory ?? [];
+    return (result?.locations ?? []).map((location) => {
+      const locationRows = rows.filter((row) => row.location_id === location.id);
+      const totalSkus = new Set(locationRows.map((row) => row.lubricant_product_id)).size;
+      const totalUnits = locationRows.reduce((sum, row) => sum + asNumber(row.quantity_on_hand), 0);
+      const lowStock = locationRows.filter((row) => asNumber(row.quantity_on_hand) <= asNumber(row.reorder_level)).length;
+      return { location, totalSkus, totalUnits, lowStock };
+    });
+  }, [result?.inventory, result?.locations]);
+
   async function submitCreateBodega(e: React.FormEvent) {
     e.preventDefault();
     try {
-      await createBodega({ code: bodegaCode, name: bodegaName, address: bodegaAddress, notes: bodegaNotes });
+      await createBodega({ name: bodegaName, address: bodegaAddress, notes: bodegaNotes });
       setMessage("Bodega created");
-      setBodegaCode(""); setBodegaName(""); setBodegaAddress(""); setBodegaNotes("");
+      setBodegaName("");
+      setBodegaAddress("");
+      setBodegaNotes("");
       await reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to create bodega");
@@ -134,20 +148,26 @@ export function BodegaClient() {
     {error ? <div className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
     {message ? <div className="rounded border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">{message}</div> : null}
 
-    <Card><CardHeader><CardTitle>Add bodega</CardTitle></CardHeader><CardContent>{roleChecking ? <p className="mb-2 text-sm text-slate-500">Checking role...</p> : null}{!isOwner && !roleChecking ? <p className="mb-2 text-sm text-amber-700">Only Owner profiles can create bodegas.</p> : null}
+    <Card><CardHeader><CardTitle>Add bodega</CardTitle></CardHeader><CardContent>{roleChecking ? <p className="mb-2 text-sm text-slate-500">Checking role...</p> : null}{!isOwner && !roleChecking ? <p className="mb-2 text-sm text-amber-700">{role ? "Only Owner profiles can create bodegas." : "No active profile found for this login."}</p> : null}
+      <p className="mb-2 text-sm text-slate-500">Bodega code is generated automatically from the bodega name.</p>
       <form className="space-y-2" onSubmit={submitCreateBodega}>
-        <Input placeholder="Code" value={bodegaCode} onChange={(e) => setBodegaCode(e.target.value)} required />
-        <Input placeholder="Name" value={bodegaName} onChange={(e) => setBodegaName(e.target.value)} required />
+        <Input placeholder="Bodega name" value={bodegaName} onChange={(e) => setBodegaName(e.target.value)} required />
         <Input placeholder="Address" value={bodegaAddress} onChange={(e) => setBodegaAddress(e.target.value)} />
         <Textarea placeholder="Notes" value={bodegaNotes} onChange={(e) => setBodegaNotes(e.target.value)} />
-        <Button type="submit" disabled={!isOwner}>{isOwner ? "Create bodega" : "Create bodega"}</Button>
+        <Button type="submit" disabled={!isOwner}>Create bodega</Button>
       </form>
+    </CardContent></Card>
+
+    <Card><CardHeader><CardTitle>Bodega list</CardTitle></CardHeader><CardContent>
+      <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr><th className="py-2">Bodega</th><th>Address</th><th>Active</th><th className="text-right">Total SKUs</th><th className="text-right">Total units</th><th className="text-right">Low stock count</th></tr></thead><tbody>
+        {bodegaSummaries.map((row) => <tr key={row.location.id} className="border-t"><td className="py-2"><div className="font-medium">{row.location.name}</div><div className="text-xs text-slate-500">Code: {row.location.code}</div></td><td>{row.location.address ?? "-"}</td><td>{row.location.is_active ? "Active" : "Inactive"}</td><td className="text-right">{row.totalSkus}</td><td className="text-right">{row.totalUnits.toFixed(2)}</td><td className="text-right">{row.lowStock}</td></tr>)}
+      </tbody></table></div>
     </CardContent></Card>
 
     <Card><CardHeader><CardTitle>Bodega inventory</CardTitle></CardHeader><CardContent>
       <select className="mb-3 w-full rounded-md border px-3 py-2 text-sm" value={selectedBodegaId} onChange={(e) => setSelectedBodegaId(e.target.value)}>
         <option value="">All bodegas</option>
-        {(result?.locations ?? []).map((b) => <option key={b.id} value={b.id}>{b.code} — {b.name}</option>)}
+        {(result?.locations ?? []).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
       </select>
       <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr><th>Bodega</th><th>SKU</th><th>Product</th><th className="text-right">Qty</th><th className="text-right">Reorder</th><th>Status</th></tr></thead><tbody>
         {filteredInventory.map((row) => <tr key={row.id} className="border-t"><td>{row.bodega_name ?? "-"}</td><td>{row.sku ?? "-"}</td><td>{row.product_name ?? "-"}</td><td className="text-right">{asNumber(row.quantity_on_hand).toFixed(2)}</td><td className="text-right">{asNumber(row.reorder_level).toFixed(2)}</td><td>{asNumber(row.quantity_on_hand) <= asNumber(row.reorder_level) ? "Low stock" : "OK"}</td></tr>)}
@@ -175,7 +195,7 @@ export function BodegaClient() {
       <form className="space-y-2" onSubmit={submitTransfer}>
         <select className="w-full rounded-md border px-3 py-2 text-sm" value={toStationLocationId} onChange={(e) => setToStationLocationId(e.target.value)}>
           <option value="">To station</option>
-          {(result?.stations ?? []).map((station) => <option key={station.id} value={station.id}>{station.code} — {station.name}</option>)}
+          {(result?.stations ?? []).map((station) => <option key={station.id} value={station.id}>{station.name}</option>)}
         </select>
         <Input placeholder="Reference" value={transferReference} onChange={(e) => setTransferReference(e.target.value)} />
         <Textarea placeholder="Notes" value={transferNotes} onChange={(e) => setTransferNotes(e.target.value)} />

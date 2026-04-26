@@ -1,35 +1,9 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import {
-  BarChart3,
-  ClipboardList,
-  Database,
-  Fuel,
-  ReceiptText,
-  Gauge,
-  History,
-  Package,
-  Settings,
-  Warehouse
-} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { appPath } from "@/lib/supabase/client";
-
-const items = [
-  { href: "/dashboard/", label: "Dashboard", icon: BarChart3 },
-  { href: "/stations/", label: "Stations", icon: Fuel },
-  { href: "/shifts/", label: "Shift Setup", icon: Gauge },
-  { href: "/shift-reports/", label: "Daily Shift Reports", icon: ClipboardList },
-  { href: "/field-capture/", label: "Field Shift Capture", icon: ClipboardList },
-  { href: "/expenses/", label: "Expenses", icon: ReceiptText },
-  { href: "/inventory/bodega/", label: "Bodega Inventory", icon: Warehouse },
-  { href: "/inventory/lubricants/", label: "Station Lubricants", icon: Package },
-  { href: "/inventory/fuel/", label: "Fuel Inventory", icon: Fuel },
-  { href: "/reports/", label: "Management Reports", icon: Database },
-  { href: "/audit-logs/", label: "Audit Logs", icon: History },
-  { href: "/settings/", label: "Settings", icon: Settings }
-];
+import { sidebarItems } from "@/lib/navigation/sidebar-items";
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -47,7 +21,7 @@ export function Sidebar() {
       </div>
 
       <nav className="space-y-1">
-        {items.map((item) => {
+        {sidebarItems.map((item) => {
           const normalizedItemPath = item.href.replace(/\/$/, "");
           const isActive = pathname === normalizedItemPath || pathname.startsWith(`${normalizedItemPath}/`);
 
