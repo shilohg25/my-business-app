@@ -1,10 +1,13 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { appPath } from "@/lib/supabase/client";
 import { sidebarItems } from "@/lib/navigation/sidebar-items";
+import { getVisibleNavItemsForRole } from "@/lib/auth/role-access";
+import { fetchCurrentProfile, type AppRole } from "@/lib/data/profile";
 
 type SidebarProps = {
   mobileOpen?: boolean;
@@ -12,6 +15,16 @@ type SidebarProps = {
 };
 
 function SidebarContent({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
+  const [role, setRole] = useState<AppRole | null>(null);
+
+  useEffect(() => {
+    fetchCurrentProfile()
+      .then((profile) => setRole((profile?.role as AppRole | null) ?? null))
+      .catch(() => setRole(null));
+  }, []);
+
+  const visibleItems = useMemo(() => getVisibleNavItemsForRole(role, sidebarItems), [role]);
+
   return (
     <>
       <div className="mb-6 flex items-center gap-3">
@@ -25,7 +38,7 @@ function SidebarContent({ pathname, onNavigate }: { pathname: string; onNavigate
       </div>
 
       <nav className="space-y-1">
-        {sidebarItems.map((item) => {
+        {visibleItems.map((item) => {
           const normalizedItemPath = item.href.replace(/\/$/, "");
           const isActive = pathname === normalizedItemPath || pathname.startsWith(`${normalizedItemPath}/`);
 
