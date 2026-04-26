@@ -87,6 +87,6 @@ export async function createStation(payload: {
     }
   });
 
-  if (error) throw error;
+  if (error) throw new Error(`Unable to create station: ${error.message}`);
   return data as { station_id: string; location_id: string | null };
 }
