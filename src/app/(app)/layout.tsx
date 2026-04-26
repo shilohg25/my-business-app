@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Sidebar } from "@/components/app/sidebar";
 import { Topbar } from "@/components/app/topbar";
 import { SupabaseStatus } from "@/components/app/supabase-status";
+import { AppRouteGuard } from "@/components/auth/app-route-guard";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -14,7 +15,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <div className="min-w-0 flex-1">
         <Topbar onOpenMobileNav={() => setMobileNavOpen(true)} />
         <SupabaseStatus />
-        <main className="p-4 sm:p-6">{children}</main>
+        <main className="p-4 sm:p-6"><AppRouteGuard>{children}</AppRouteGuard></main>
       </div>
     </div>
   );

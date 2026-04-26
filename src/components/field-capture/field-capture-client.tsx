@@ -27,6 +27,8 @@ import {
   type ShiftHandoffConfirmRowInput
 } from "@/lib/analytics/field-capture-handoff";
 import { confirmShiftHandoff, fetchLatestMeterHandoff } from "@/lib/data/field-capture-handoff";
+import { fetchAllowedDeliveryStations, type AllowedDeliveryStation } from "@/lib/data/fuel-deliveries";
+import { FuelDeliveryForm } from "@/components/fuel-deliveries/fuel-delivery-form";
 
 type Row = Record<string, unknown>;
 const shiftOptions = ["5am–1pm", "1pm–9pm", "9pm–5am", "Custom"];
@@ -93,6 +95,7 @@ export default function FieldCaptureClient() {
   const [handoffStatus, setHandoffStatus] = useState<string | null>(null);
   const [handoffWarning, setHandoffWarning] = useState<string | null>(null);
   const [handoffSkipped, setHandoffSkipped] = useState(false);
+  const [allowedDeliveryStations, setAllowedDeliveryStations] = useState<AllowedDeliveryStation[]>([]);
 
   const isEditable = activeSession?.status === "draft";
   const isOwnerAdmin = role === "Owner" || role === "Admin" || role === "Co-Owner";
@@ -105,10 +108,11 @@ export default function FieldCaptureClient() {
   const loadInitialData = async () => {
     setLoading(true);
     try {
-      const [stationRows, sessions, profile] = await Promise.all([listStations(), fetchMyDraftCaptureSessions(), fetchCurrentProfile()]);
+      const [stationRows, sessions, profile, assignedStations] = await Promise.all([listStations(), fetchMyDraftCaptureSessions(), fetchCurrentProfile(), fetchAllowedDeliveryStations()]);
       setStations(stationRows.filter((station) => station.is_active));
       setRole(profile?.role ?? null);
       setMySessions(sessions);
+      setAllowedDeliveryStations(assignedStations);
       const newest = sessions[0] ?? null;
       setActiveSession(newest);
       if (newest) {
@@ -352,6 +356,14 @@ export default function FieldCaptureClient() {
       <input className="min-h-11 w-full rounded-lg border px-3" type="date" value={reportDate} onChange={(e) => setReportDate(e.target.value)} />
       <button type="button" disabled={loading} onClick={onStartSession} className="min-h-11 w-full rounded-xl bg-slate-900 text-white">Start session</button>
     </section>
+
+
+    <FuelDeliveryForm
+      mode="field"
+      allowedStations={allowedDeliveryStations}
+      defaultStationId={activeSession?.station_id ?? selectedStationId}
+      onSuccess={() => setMessage("Fuel delivery recorded.")}
+    />
 
     {activeSession ? <>
       <section className="rounded-2xl border bg-white p-4 text-sm"><p>Status: {activeSession.status}</p>{!isEditable ? <p className="text-amber-700">This session is read-only.</p> : null}{activeSession.status === "published" && activeSession.published_shift_report_id ? <p><a className="underline" href={getPublishedShiftReportUrl(activeSession.published_shift_report_id)}>View final report</a></p> : null}</section>

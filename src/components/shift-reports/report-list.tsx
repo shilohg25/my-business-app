@@ -11,6 +11,7 @@ import { areFiltersDefault, getCurrentMonthDateRange } from "@/lib/utils/filters
 import { formatCurrency } from "@/lib/utils";
 import { formatSignedCurrency, getDiscrepancyLabel, getDiscrepancyStatus } from "@/lib/analytics/discrepancy";
 import { getShiftReportSourceLabel } from "@/lib/domain/source-labels";
+import { fetchCurrentProfile } from "@/lib/data/profile";
 
 type ReportStatusFilter = "all" | "draft" | "submitted" | "reviewed" | "approved";
 
@@ -52,6 +53,8 @@ export function ReportList() {
   const [startDate, setStartDate] = useState(defaultFilters.startDate);
   const [endDate, setEndDate] = useState(defaultFilters.endDate);
   const [searchText, setSearchText] = useState(defaultFilters.searchText);
+  const [role, setRole] = useState<string | null>(null);
+  const isUserRole = role === "User";
 
   async function refresh() {
     if (!liveData) {
@@ -73,6 +76,7 @@ export function ReportList() {
 
   useEffect(() => {
     void refresh();
+    fetchCurrentProfile().then((profile) => setRole(profile?.role ?? null)).catch(() => setRole(null));
   }, [liveData]);
 
   async function approve(id: string) {
@@ -229,9 +233,11 @@ export function ReportList() {
                         >
                           View
                         </a>
-                        <Button variant="outline" onClick={() => approve(report.id)} disabled={isApproved || isBusy}>
-                          {isBusy ? "Approving..." : isApproved ? "Approved" : "Approve"}
-                        </Button>
+                        {!isUserRole ? (
+                          <Button variant="outline" onClick={() => approve(report.id)} disabled={isApproved || isBusy}>
+                            {isBusy ? "Approving..." : isApproved ? "Approved" : "Approve"}
+                          </Button>
+                        ) : null}
                       </div>
                     </td>
                   </tr>

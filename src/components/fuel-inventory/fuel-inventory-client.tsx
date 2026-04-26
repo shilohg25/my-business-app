@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input";
 import { ResetFiltersButton } from "@/components/ui/reset-filters-button";
 import { SimpleModal } from "@/components/ui/simple-modal";
 import { Textarea } from "@/components/ui/textarea";
+import { FuelDeliveryForm } from "@/components/fuel-deliveries/fuel-delivery-form";
+import { fetchAllowedDeliveryStations, type AllowedDeliveryStation } from "@/lib/data/fuel-deliveries";
 import { canUseLiveData } from "@/lib/data/client";
 import {
   createFuelOpeningBaseline,
@@ -88,6 +90,7 @@ export function FuelInventoryClient() {
   const [deliveryModalOpen, setDeliveryModalOpen] = useState(false);
   const [deliverySaving, setDeliverySaving] = useState(false);
   const [deliveryError, setDeliveryError] = useState<string | null>(null);
+  const [allowedDeliveryStations, setAllowedDeliveryStations] = useState<AllowedDeliveryStation[]>([]);
   const [deliveryForm, setDeliveryForm] = useState({
     station_id: "",
     tank_id: "",
@@ -153,8 +156,8 @@ export function FuelInventoryClient() {
       return profile?.role ?? null;
     };
 
-    Promise.all([reload(), loadRole()])
-      .then(([, nextRole]) => setRole(nextRole))
+    Promise.all([reload(), loadRole(), fetchAllowedDeliveryStations()])
+      .then(([, nextRole, stations]) => { setRole(nextRole); setAllowedDeliveryStations(stations); })
       .catch((nextError: Error) => setError(nextError.message))
       .finally(() => {
         setLoading(false);
@@ -605,73 +608,16 @@ export function FuelInventoryClient() {
         open={deliveryModalOpen}
         title="Record Fuel Delivery"
       >
-        <form className="space-y-3" onSubmit={handleSubmitDelivery}>
-          <label className="block space-y-1 text-sm">
-            <span className="text-slate-600">Station</span>
-            <select className="w-full rounded-md border px-3 py-2 text-sm" value={deliveryForm.station_id} onChange={(e) => setDeliveryForm((prev) => ({ ...prev, station_id: e.target.value }))}>
-              <option value="">Select station</option>
-              {(result?.stations ?? []).map((station) => (
-                <option key={station.id} value={station.id}>
-                  {station.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block space-y-1 text-sm">
-            <span className="text-slate-600">Product</span>
-            <select className="w-full rounded-md border px-3 py-2 text-sm" value={deliveryForm.product_code} onChange={(e) => setDeliveryForm((prev) => ({ ...prev, product_code: e.target.value }))}>
-              <option>DIESEL</option>
-              <option>SPECIAL</option>
-              <option>UNLEADED</option>
-            </select>
-          </label>
-          <label className="block space-y-1 text-sm">
-            <span className="text-slate-600">Delivery date</span>
-            <Input type="date" value={deliveryForm.delivery_date} onChange={(e) => setDeliveryForm((prev) => ({ ...prev, delivery_date: e.target.value }))} />
-          </label>
-          <label className="block space-y-1 text-sm">
-            <span className="text-slate-600">Liters received</span>
-            <Input type="number" step="0.001" placeholder="Liters" value={deliveryForm.liters} onChange={(e) => setDeliveryForm((prev) => ({ ...prev, liters: e.target.value }))} />
-          </label>
-          <label className="block space-y-1 text-sm">
-            <span className="text-slate-600">Supplier</span>
-            <Input placeholder="Supplier" value={deliveryForm.supplier_name} onChange={(e) => setDeliveryForm((prev) => ({ ...prev, supplier_name: e.target.value }))} />
-          </label>
-          <label className="block space-y-1 text-sm">
-            <span className="text-slate-600">Invoice number</span>
-            <Input placeholder="Invoice #" value={deliveryForm.invoice_number} onChange={(e) => setDeliveryForm((prev) => ({ ...prev, invoice_number: e.target.value }))} />
-          </label>
-          <label className="block space-y-1 text-sm">
-            <span className="text-slate-600">Delivery reference</span>
-            <Input placeholder="Delivery reference" value={deliveryForm.delivery_reference} onChange={(e) => setDeliveryForm((prev) => ({ ...prev, delivery_reference: e.target.value }))} />
-          </label>
-          <label className="block space-y-1 text-sm">
-            <span className="text-slate-600">Unit cost</span>
-            <Input type="number" step="0.01" placeholder="Unit cost" value={deliveryForm.unit_cost} onChange={(e) => setDeliveryForm((prev) => ({ ...prev, unit_cost: e.target.value }))} />
-          </label>
-          <label className="block space-y-1 text-sm">
-            <span className="text-slate-600">Notes</span>
-            <Textarea placeholder="Notes" value={deliveryForm.notes} onChange={(e) => setDeliveryForm((prev) => ({ ...prev, notes: e.target.value }))} />
-          </label>
-          <Input placeholder="Tank id (optional)" value={deliveryForm.tank_id} onChange={(e) => setDeliveryForm((prev) => ({ ...prev, tank_id: e.target.value }))} />
-          {deliveryError ? <p className="text-sm text-red-700">{deliveryError}</p> : null}
-          <div className="flex justify-end gap-2">
-            <Button
-              disabled={deliverySaving}
-              onClick={() => {
-                setDeliveryModalOpen(false);
-                setDeliveryError(null);
-              }}
-              type="button"
-              variant="outline"
-            >
-              Cancel
-            </Button>
-            <Button disabled={deliverySaving} type="submit">
-              {deliverySaving ? "Saving..." : "Record delivery"}
-            </Button>
-          </div>
-        </form>
+        <FuelDeliveryForm
+          mode="inventory"
+          allowedStations={allowedDeliveryStations}
+          defaultStationId={stationFilter !== "ALL" ? stationFilter : allowedDeliveryStations[0]?.station_id}
+          onSuccess={async () => {
+            setDeliveryModalOpen(false);
+            setMessage("Fuel delivery recorded.");
+            await reload();
+          }}
+        />
       </SimpleModal>
 
       {loading ? <p className="text-sm text-slate-500">Loading fuel inventory...</p> : null}
