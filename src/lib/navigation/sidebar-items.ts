@@ -21,7 +21,6 @@ export const sidebarItems: SidebarItem[] = [
   { href: "/dashboard/", label: "Dashboard", icon: BarChart3 },
   { href: "/stations/", label: "Stations", icon: Fuel },
   { href: "/shift-reports/", label: "Daily Shift Reports", icon: ClipboardList },
-  { href: "/field-capture/", label: "Field Shift Capture", icon: ClipboardList },
   { href: "/expenses/", label: "Expenses", icon: ReceiptText },
   { href: "/inventory/bodega/", label: "Bodega Inventory", icon: Warehouse },
   { href: "/inventory/lubricants/", label: "Station Lubricants", icon: Package },

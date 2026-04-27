@@ -8,13 +8,16 @@ describe("sidebar navigation", () => {
     expect(labels).not.toContain("Shift Setup");
   });
 
+  it("does not include Field Shift Capture", () => {
+    expect(labels).not.toContain("Field Shift Capture");
+  });
+
   it("includes all expected operations links", () => {
     expect(labels).toEqual(
       expect.arrayContaining([
         "Dashboard",
         "Stations",
         "Daily Shift Reports",
-        "Field Shift Capture",
         "Expenses",
         "Bodega Inventory",
         "Station Lubricants",
