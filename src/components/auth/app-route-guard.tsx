@@ -61,12 +61,8 @@ export function AppRouteGuard({ children }: { children: React.ReactNode }) {
     <div className="mx-auto max-w-xl rounded-2xl border border-red-200 bg-white p-6 text-center">
       <h2 className="text-lg font-semibold text-slate-900">Access denied</h2>
       <p className="mt-2 text-sm text-slate-600">This page is restricted for your role.</p>
-      {role === "User" && currentPath.startsWith("/inventory/fuel") ? (
-        <p className="mt-2 text-sm text-slate-600">Fuel Inventory is restricted. Use Field Shift Capture to record fuel deliveries.</p>
-      ) : null}
       <div className="mt-4 flex justify-center gap-3">
-        <a href={appPath("/field-capture/")}><Button type="button">Go to Field Shift Capture</Button></a>
-        <a href={appPath("/shift-reports/")}><Button type="button" variant="outline">Go to Daily Shift Reports</Button></a>
+        <a href={appPath("/shift-reports/")}><Button type="button">Go to Daily Shift Reports</Button></a>
       </div>
     </div>
   );

@@ -3,18 +3,21 @@ import {
   canAccessRoute,
   canCreateManualShiftReport,
   canRecordFieldFuelDelivery,
-  canUseFieldCapture,
   getVisibleNavItemsForRole
 } from "@/lib/auth/role-access";
 import { sidebarItems } from "@/lib/navigation/sidebar-items";
 
 describe("role access", () => {
-  it("User can access /field-capture/", () => {
-    expect(canAccessRoute("User", "/field-capture/")).toBe(true);
-  });
-
   it("User can access /shift-reports/", () => {
     expect(canAccessRoute("User", "/shift-reports/")).toBe(true);
+  });
+
+  it("User can access /shift-reports/view/", () => {
+    expect(canAccessRoute("User", "/shift-reports/view/?id=abc")).toBe(true);
+  });
+
+  it("User cannot access /shift-reports/new/", () => {
+    expect(canAccessRoute("User", "/shift-reports/new/")).toBe(false);
   });
 
   it("User cannot access /inventory/fuel/", () => {
@@ -41,13 +44,6 @@ describe("role access", () => {
     expect(canCreateManualShiftReport("User")).toBe(false);
   });
 
-  it("field capture is available to all active app roles", () => {
-    expect(canUseFieldCapture("Owner")).toBe(true);
-    expect(canUseFieldCapture("Admin")).toBe(true);
-    expect(canUseFieldCapture("Co-Owner")).toBe(true);
-    expect(canUseFieldCapture("User")).toBe(true);
-  });
-
   it("field fuel delivery is limited to Owner/Admin/User", () => {
     expect(canRecordFieldFuelDelivery("Owner")).toBe(true);
     expect(canRecordFieldFuelDelivery("Admin")).toBe(true);
@@ -55,8 +51,8 @@ describe("role access", () => {
     expect(canRecordFieldFuelDelivery("Co-Owner")).toBe(false);
   });
 
-  it("User nav only includes Field Shift Capture and Daily Shift Reports", () => {
+  it("User nav only includes Daily Shift Reports", () => {
     const labels = getVisibleNavItemsForRole("User", sidebarItems).map((item) => item.label);
-    expect(labels).toEqual(["Field Shift Capture", "Daily Shift Reports"]);
+    expect(labels).toEqual(["Daily Shift Reports"]);
   });
 });

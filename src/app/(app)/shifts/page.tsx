@@ -7,16 +7,16 @@ export default function Page() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Shift Setup Retired</h1>
         <p className="text-sm text-slate-500">
-          Shift selection will be handled inside Field Shift Capture. Shift templates may later move to Settings.
+          Shift setup is no longer managed in the web app. Cashier field data entry is handled in the separate mobile app.
         </p>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Use Field Shift Capture</CardTitle>
+          <CardTitle>Use Daily Shift Reports</CardTitle>
         </CardHeader>
         <CardContent>
-          <a className="text-sm font-medium text-blue-700 underline" href={appPath("/field-capture/")}>Open Field Shift Capture</a>
+          <a className="text-sm font-medium text-blue-700 underline" href={appPath("/shift-reports/")}>Open Daily Shift Reports</a>
         </CardContent>
       </Card>
     </div>

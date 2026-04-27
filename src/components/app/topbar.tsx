@@ -6,19 +6,15 @@ import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { canCreateManualShiftReport } from "@/lib/auth/role-access";
 import { fetchCurrentProfile, type AppRole } from "@/lib/data/profile";
-import { appPath, createSupabaseBrowserClient, isSupabaseConfigured, signOutOfSupabase, stripAppBasePath } from "@/lib/supabase/client";
+import { appPath, createSupabaseBrowserClient, isSupabaseConfigured, signOutOfSupabase } from "@/lib/supabase/client";
 
 type TopbarProps = {
   onOpenMobileNav?: () => void;
 };
 
 export function getTopbarPrimaryAction(role: AppRole | null, currentPath: string) {
-  const normalizedPath = (stripAppBasePath(currentPath).replace(/\/+$/, "") || "/");
   if (canCreateManualShiftReport(role)) {
     return { href: appPath("/shift-reports/new/"), label: "Manual Shift Report" } as const;
-  }
-  if (role === "User" && normalizedPath !== "/field-capture") {
-    return { href: appPath("/field-capture/"), label: "Start Field Capture" } as const;
   }
   return null;
 }
