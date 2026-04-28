@@ -19,6 +19,7 @@ import { BalanceSummary } from "./balance-summary";
 import { canUseLiveData, commitShiftReport, listStations, type StationRow } from "@/lib/data/client";
 import { getSupabaseConfigurationState } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
+import { shiftReportSaveSchema } from "@/lib/validation/shift-report";
 
 type FormMessage = {
   kind: "success" | "error" | "info";
@@ -79,43 +80,20 @@ function validateReportForSave(report: ShiftReportInput, stations: StationRow[],
     errors.push("Supabase is not configured, so this report can be calculated but not saved.");
   }
 
+  const parsed = shiftReportSaveSchema.safeParse(report);
+  if (!parsed.success) {
+    errors.push(...parsed.error.issues.map((issue) => issue.message));
+  }
+
   if (stations.length > 0 && !report.stationId) {
     errors.push("Select a station.");
-  }
-
-  if (!report.reportDate.trim()) {
-    errors.push("Report date is required.");
-  }
-
-  if (!report.dutyName.trim()) {
-    errors.push("Duty / cashier is required.");
-  }
-
-  if (!report.shiftTimeLabel.trim()) {
-    errors.push("Shift is required.");
-  }
-
-  if (report.prices.length === 0) {
-    errors.push("At least one product price is required.");
   }
 
   if (!report.prices.some((price) => price.price > 0)) {
     errors.push("At least one product price must be greater than zero.");
   }
 
-  if (report.prices.some((price) => !price.productCode.trim())) {
-    errors.push("Every price row must have a product code.");
-  }
-
-  if (report.meterReadings.length === 0) {
-    errors.push("At least one meter reading is required.");
-  }
-
-  if (report.meterReadings.some((line) => !line.pumpLabel.trim() || !line.productCode.trim())) {
-    errors.push("Every meter reading must have a pump label and product code.");
-  }
-
-  return errors;
+  return Array.from(new Set(errors));
 }
 
 export function ShiftReportForm() {

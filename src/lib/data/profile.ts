@@ -1,7 +1,6 @@
 import { canUseLiveData } from "@/lib/data/client";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-
-export type AppRole = "Owner" | "Co-Owner" | "Admin" | "User";
+import type { AppRole } from "@/types/auth";
 
 export interface CurrentProfile {
   id: string;
