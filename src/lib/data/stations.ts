@@ -1,6 +1,6 @@
 import { canUseLiveData } from "@/lib/data/client";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { fetchCurrentProfile } from "@/lib/data/profile";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 export interface StationMeterRow {
   id: string;
@@ -30,6 +30,15 @@ export interface StationManagementResult {
   rows: StationManagementRow[];
 }
 
+type ProductCode = StationMeterRow["product_type"];
+
+const DEFAULT_PRODUCT_TYPE: ProductCode = "DIESEL";
+
+function parseProductCode(value: string | null | undefined): ProductCode {
+  if (value === "DIESEL" || value === "SPECIAL" || value === "UNLEADED") return value;
+  return DEFAULT_PRODUCT_TYPE;
+}
+
 export async function fetchStationManagementData(): Promise<StationManagementResult> {
   if (!canUseLiveData()) return { role: null, canCreateStation: false, canManageMeters: false, rows: [] };
 
@@ -53,16 +62,65 @@ export async function fetchStationManagementData(): Promise<StationManagementRes
   }
 
   const ids = stations.map((station) => station.id);
-  const [locationsResult, baselinesResult, metersResult] = await Promise.all([
+  const [locationsResult, baselinesResult, pumpsResult] = await Promise.all([
     supabase.from("fuel_inventory_locations").select("station_id, code").eq("location_type", "station").in("station_id", ids),
     supabase.from("fuel_station_fuel_baselines").select("id, station_id, status, baseline_at").in("station_id", ids),
     canManageMeters
-      ? supabase.from("fuel_station_meters").select("id, station_id, product_type, meter_label, display_order, is_active").in("station_id", ids).order("display_order", { ascending: true })
+      ? supabase.from("fuel_pumps").select("id, station_id, pump_label, display_order, is_active").in("station_id", ids).order("display_order", { ascending: true })
       : Promise.resolve({ data: [], error: null })
   ]);
 
-  const errors = [locationsResult.error, baselinesResult.error, metersResult.error].filter(Boolean);
-  if (errors.length) throw errors[0];
+  const baseErrors = [locationsResult.error, baselinesResult.error, pumpsResult.error].filter(Boolean);
+  if (baseErrors.length) throw baseErrors[0];
+
+  const pumps = (pumpsResult.data ?? []) as Array<{
+    id: string;
+    station_id: string;
+    pump_label: string;
+    display_order: number;
+    is_active: boolean;
+  }>;
+
+  const pumpIds = pumps.map((pump) => pump.id);
+  const assignmentsResult = canManageMeters && pumpIds.length > 0
+    ? await supabase
+        .from("fuel_pump_product_assignments")
+        .select("id, pump_id, product_id, effective_from")
+        .eq("is_active", true)
+        .is("effective_to", null)
+        .in("pump_id", pumpIds)
+        .order("effective_from", { ascending: false })
+    : { data: [], error: null };
+
+  if (assignmentsResult.error) throw assignmentsResult.error;
+
+  const assignmentRows = (assignmentsResult.data ?? []) as Array<{
+    id: string;
+    pump_id: string;
+    product_id: string;
+    effective_from: string;
+  }>;
+
+  const latestAssignmentByPump = new Map<string, { id: string; product_id: string; effective_from: string }>();
+  assignmentRows.forEach((assignment) => {
+    const existing = latestAssignmentByPump.get(assignment.pump_id);
+    if (!existing || assignment.effective_from > existing.effective_from) {
+      latestAssignmentByPump.set(assignment.pump_id, {
+        id: assignment.id,
+        product_id: assignment.product_id,
+        effective_from: assignment.effective_from
+      });
+    }
+  });
+
+  const productIds = Array.from(new Set(Array.from(latestAssignmentByPump.values()).map((assignment) => assignment.product_id)));
+  const productsResult = canManageMeters && productIds.length > 0
+    ? await supabase.from("fuel_products").select("id, code").in("id", productIds)
+    : { data: [], error: null };
+
+  if (productsResult.error) throw productsResult.error;
+
+  const productCodeById = new Map(((productsResult.data ?? []) as Array<{ id: string; code: string }>).map((product) => [product.id, product.code]));
 
   const locationByStation = new Map(((locationsResult.data ?? []) as Array<{ station_id: string; code: string }>).map((x) => [x.station_id, x.code]));
 
@@ -74,11 +132,21 @@ export async function fetchStationManagementData(): Promise<StationManagementRes
     }
   });
 
-  const meterRows = (metersResult.data ?? []) as StationMeterRow[];
   const metersByStation = new Map<string, StationMeterRow[]>();
-  meterRows.forEach((meter) => {
-    if (!metersByStation.has(meter.station_id)) metersByStation.set(meter.station_id, []);
-    metersByStation.get(meter.station_id)?.push(meter);
+  pumps.forEach((pump) => {
+    const assignment = latestAssignmentByPump.get(pump.id);
+    const productCode = parseProductCode(assignment ? productCodeById.get(assignment.product_id) : undefined);
+    const meter: StationMeterRow = {
+      id: pump.id,
+      station_id: pump.station_id,
+      product_type: productCode,
+      meter_label: pump.pump_label,
+      display_order: pump.display_order,
+      is_active: pump.is_active
+    };
+
+    if (!metersByStation.has(pump.station_id)) metersByStation.set(pump.station_id, []);
+    metersByStation.get(pump.station_id)?.push(meter);
   });
 
   return {
@@ -126,18 +194,118 @@ export async function upsertStationMeter(payload: {
   if (!canUseLiveData()) throw new Error("Supabase is not configured");
 
   const supabase = createSupabaseBrowserClient();
-  const { data, error } = await supabase.rpc("fuel_upsert_station_meter", { payload });
-  if (error) throw new Error(`Unable to save station meter: ${error.message}`);
 
-  return data as StationMeterRow;
+  const { data: product, error: productError } = await supabase
+    .from("fuel_products")
+    .select("id, code")
+    .eq("code", payload.product_type)
+    .eq("is_fuel", true)
+    .limit(1)
+    .maybeSingle();
+
+  if (productError) throw new Error(`Unable to find product: ${productError.message}`);
+  if (!product) throw new Error(`Unable to find product: ${payload.product_type}`);
+
+  const nowIso = new Date().toISOString();
+  const meterPatch = {
+    station_id: payload.station_id,
+    pump_label: payload.meter_label,
+    display_order: payload.display_order ?? 0,
+    is_active: payload.is_active ?? true
+  };
+
+  let pumpId = payload.id;
+
+  if (payload.id) {
+    const { error } = await supabase
+      .from("fuel_pumps")
+      .update(meterPatch)
+      .eq("id", payload.id)
+      .eq("station_id", payload.station_id);
+
+    if (error) throw new Error(`Unable to save station meter: ${error.message}`);
+  } else {
+    const { data, error } = await supabase
+      .from("fuel_pumps")
+      .insert(meterPatch)
+      .select("id")
+      .single();
+
+    if (error) throw new Error(`Unable to save station meter: ${error.message}`);
+    pumpId = (data as { id: string }).id;
+  }
+
+  if (!pumpId) throw new Error("Unable to save station meter: missing pump id");
+
+  const { data: existingAssignments, error: existingAssignmentsError } = await supabase
+    .from("fuel_pump_product_assignments")
+    .select("id")
+    .eq("pump_id", pumpId)
+    .eq("is_active", true)
+    .is("effective_to", null)
+    .order("effective_from", { ascending: false });
+
+  if (existingAssignmentsError) throw new Error(`Unable to save station meter product assignment: ${existingAssignmentsError.message}`);
+
+  const [currentAssignment, ...staleAssignments] = (existingAssignments ?? []) as Array<{ id: string }>;
+
+  if (currentAssignment) {
+    const { error } = await supabase
+      .from("fuel_pump_product_assignments")
+      .update({
+        product_id: product.id,
+        is_active: true,
+        effective_to: null,
+        effective_from: nowIso
+      })
+      .eq("id", currentAssignment.id);
+
+    if (error) throw new Error(`Unable to save station meter product assignment: ${error.message}`);
+
+    if (staleAssignments.length > 0) {
+      const staleIds = staleAssignments.map((row) => row.id);
+      const { error: staleError } = await supabase
+        .from("fuel_pump_product_assignments")
+        .update({ is_active: false, effective_to: nowIso })
+        .in("id", staleIds);
+
+      if (staleError) throw new Error(`Unable to archive stale product assignments: ${staleError.message}`);
+    }
+  } else {
+    const { error } = await supabase
+      .from("fuel_pump_product_assignments")
+      .insert({
+        pump_id: pumpId,
+        product_id: product.id,
+        is_active: true,
+        effective_to: null,
+        effective_from: nowIso
+      });
+
+    if (error) throw new Error(`Unable to save station meter product assignment: ${error.message}`);
+  }
+
+  return {
+    id: pumpId,
+    station_id: payload.station_id,
+    product_type: parseProductCode(product.code),
+    meter_label: payload.meter_label,
+    display_order: payload.display_order ?? 0,
+    is_active: payload.is_active ?? true
+  } as StationMeterRow;
 }
 
 export async function archiveStationMeter(meterId: string) {
   if (!canUseLiveData()) throw new Error("Supabase is not configured");
 
   const supabase = createSupabaseBrowserClient();
-  const { data, error } = await supabase.rpc("fuel_archive_station_meter", { meter_id: meterId });
+  const archivedAt = new Date().toISOString();
+  const { error } = await supabase
+    .from("fuel_pumps")
+    .update({ is_active: false, archived_at: archivedAt })
+    .eq("id", meterId);
+
   if (error) throw new Error(`Unable to archive station meter: ${error.message}`);
 
-  return data as string;
+  return meterId;
 }
