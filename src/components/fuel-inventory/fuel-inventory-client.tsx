@@ -15,6 +15,7 @@ import { fetchActiveStationPumps, type ActiveStationPumpRow } from "@/lib/data/s
 import {
   createFuelOpeningBaseline,
   fetchFuelInventoryDashboard,
+  fetchStationPumpMeterState,
   finalizeFuelOpeningBaseline,
   recordFuelDelivery,
   voidFuelOpeningBaseline
@@ -98,6 +99,7 @@ export function FuelInventoryClient() {
     }>
   >([]);
   const [stationPumpsLoading, setStationPumpsLoading] = useState(false);
+  const [pumpStateByStation, setPumpStateByStation] = useState<Record<string, Awaited<ReturnType<typeof fetchStationPumpMeterState>>>>({});
 
   const [deliveryModalOpen, setDeliveryModalOpen] = useState(false);
   const [deliverySaving, setDeliverySaving] = useState(false);
@@ -177,6 +179,8 @@ export function FuelInventoryClient() {
     if (!liveData) return;
     const data = await fetchFuelInventoryDashboard({ stationId: stationFilter === "ALL" ? undefined : stationFilter, product: productFilter, startDate, endDate });
     setResult(data);
+    const stationStates = await Promise.all((data.stations ?? []).map(async (station) => [station.id, await fetchStationPumpMeterState(station.id)] as const));
+    setPumpStateByStation(Object.fromEntries(stationStates));
     if (!deliveryForm.station_id && data.stations[0]) {
       setDeliveryForm((prev) => ({ ...prev, station_id: data.stations[0].id }));
     }
@@ -628,6 +632,43 @@ export function FuelInventoryClient() {
                       )}
                     </tbody>
                   </table>
+                </div>
+                <div className="border-t p-4">
+                  <h4 className="mb-2 text-sm font-semibold">Pump meter readings by station</h4>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead className="text-left text-slate-500">
+                        <tr>
+                          <th className="py-1">Pump label</th>
+                          <th>Product</th>
+                          <th className="text-right">Opening meter</th>
+                          <th className="text-right">Latest closing</th>
+                          <th className="text-right">Latest liters out</th>
+                          <th>Last reading</th>
+                          <th>Last source</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(pumpStateByStation[group.stationId] ?? []).map((pump) => {
+                          const opening = Number(pump.latest_opening_meter_reading ?? 0);
+                          const closing = Number(pump.latest_closing_meter_reading ?? 0);
+                          const litersOut = closing - opening;
+                          const missing = pump.latest_reading_at == null;
+                          return (
+                            <tr key={pump.pump_id} className="border-t">
+                              <td className="py-1">{pump.pump_label}</td>
+                              <td>{pump.product_code ?? "-"}</td>
+                              <td className="text-right tabular-nums">{opening.toFixed(2)}</td>
+                              <td className="text-right tabular-nums">{closing.toFixed(2)}</td>
+                              <td className="text-right tabular-nums">{litersOut.toFixed(2)}</td>
+                              <td>{pump.latest_reading_at ? new Date(pump.latest_reading_at).toLocaleString() : "No finalized opening meter reading found for this pump."}</td>
+                              <td>{pump.latest_source ?? "-"}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </section>
             );

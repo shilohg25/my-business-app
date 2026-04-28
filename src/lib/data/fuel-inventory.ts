@@ -85,21 +85,23 @@ export async function fetchFuelInventoryDashboard(options: FetchFuelInventoryDas
     };
   }
 
-  const [productsResult, tanksResult, baselineData, deliveriesResult, readingsResult, shiftReportsResult] = await Promise.all([
+  const [productsResult, tanksResult, baselineData, deliveriesResult, readingsResult, pumpMeterEventsResult] = await Promise.all([
     supabase.from("fuel_products").select("id, code, name, is_active").eq("is_fuel", true).eq("is_active", true).order("code", { ascending: true }),
     supabase.from("fuel_tanks").select("id, station_id, product_id, product_code_snapshot, tank_label, is_active").in("station_id", stationIds).eq("is_active", true),
     fetchFuelInventoryBaselines(),
     supabase.from("fuel_deliveries").select("id, station_id, tank_id, product_id, product_code_snapshot, delivery_date, liters, invoice_number, delivery_reference, notes").in("station_id", stationIds).gte("delivery_date", startDate).lte("delivery_date", endDate).order("delivery_date", { ascending: false }),
     supabase.from("fuel_tank_readings").select("id, station_id, tank_id, product_id, product_code_snapshot, reading_date, opening_liters, received_liters, meter_liters_out, expected_ending_liters, actual_ending_liters, variance_liters, source, notes").in("station_id", stationIds).gte("reading_date", startDate).lte("reading_date", endDate).order("reading_date", { ascending: false }),
-    supabase.from("fuel_shift_reports").select("station_id, report_date, fuel_meter_readings(product_code_snapshot, liters_sold)").in("station_id", stationIds).gte("report_date", startDate).lte("report_date", endDate)
+    supabase.from("fuel_pump_meter_reading_events").select("station_id, product_code_snapshot, liters_out, reading_date").in("station_id", stationIds).gte("reading_date", startDate).lte("reading_date", endDate)
   ]);
 
-  const errors = [productsResult.error, tanksResult.error, deliveriesResult.error, readingsResult.error, shiftReportsResult.error].filter(Boolean);
+  const errors = [productsResult.error, tanksResult.error, deliveriesResult.error, readingsResult.error, pumpMeterEventsResult.error].filter(Boolean);
   if (errors.length) throw new Error(errors[0]?.message ?? "Unable to fetch fuel inventory dashboard data");
 
-  const meterReadings = ((shiftReportsResult.data ?? []) as Array<{ station_id: string; fuel_meter_readings: Array<{ product_code_snapshot: string; liters_sold: number | string | null }> | null }>).flatMap(
-    (report) => (report.fuel_meter_readings ?? []).map((row) => ({ station_id: report.station_id, product_code_snapshot: row.product_code_snapshot, liters_sold: row.liters_sold }))
-  );
+  const meterReadings = ((pumpMeterEventsResult.data ?? []) as Array<{ station_id: string; product_code_snapshot: string; liters_out: number | string | null }>).map((row) => ({
+    station_id: row.station_id,
+    product_code_snapshot: row.product_code_snapshot,
+    liters_sold: row.liters_out
+  }));
 
   const summary = buildStationFuelInventorySummary({
     stations: stations.map((row) => ({ id: row.id, name: row.name })),
@@ -218,3 +220,38 @@ export async function recordTankReading(payload: {
 }
 
 export { normalizeFuelProductCode };
+
+export async function fetchStationPumpMeterState(stationId: string) {
+  if (!canUseLiveData() || !stationId) return [];
+  const supabase = createSupabaseBrowserClient();
+  const { data, error } = await supabase.rpc("fuel_get_station_pump_meter_state", { station_id: stationId });
+  if (error) throw error;
+  return (data ?? []) as Array<{
+    pump_id: string;
+    station_id: string;
+    pump_label: string;
+    product_id: string | null;
+    product_code: string | null;
+    product_name: string | null;
+    latest_opening_meter_reading: number | null;
+    latest_closing_meter_reading: number | null;
+    latest_reading_at: string | null;
+    latest_source: string | null;
+  }>;
+}
+
+export async function recordPumpMeterReadings(payload: {
+  station_id: string;
+  reading_date?: string;
+  reading_at?: string;
+  source: "baseline" | "web" | "mobile" | "shift_report" | "import" | "adjustment";
+  shift_report_id?: string;
+  capture_session_id?: string;
+  readings: Array<{ pump_id: string; closing_meter_reading: number; notes?: string }>;
+}) {
+  if (!canUseLiveData()) throw new Error("Supabase is not configured");
+  const supabase = createSupabaseBrowserClient();
+  const { data, error } = await supabase.rpc("fuel_record_pump_meter_readings", { payload });
+  if (error) throw error;
+  return (data ?? []) as string[];
+}

@@ -1,10 +1,11 @@
-# Mobile App Later (Execution Notes)
+# Mobile App Later Rules
 
-- The mobile app should focus on **fast field data entry** only.
-- Mobile must use the **same Supabase backend** (tables, RLS, and RPC functions).
-- Mobile must **not** own separate calculation/approval/audit business rules.
-- Web app remains the executive/admin control center for approvals, reporting, settings, and audits.
-
-## Recommended boundary
-- Mobile: capture meter readings, expenses, receipts, and shift submission drafts.
-- Web: user/role management, audit log review, analytics, exception handling, exports.
+Mobile data entry must:
+- Load assigned station.
+- Load active pumps for that station.
+- Show pump and product as read-only.
+- Show opening meter reading as read-only.
+- Let cashier enter closing meter reading only.
+- Auto-calculate liters out.
+- Submit reading to `fuel_record_pump_meter_readings`.
+- The closing meter reading becomes the next opening meter reading for the next cashier.
