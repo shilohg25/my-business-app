@@ -17,6 +17,7 @@ import {
   fetchFuelInventoryDashboard,
   fetchStationPumpMeterState,
   finalizeFuelOpeningBaseline,
+  recordPumpMeterReadings,
   recordFuelDelivery,
   voidFuelOpeningBaseline
 } from "@/lib/data/fuel-inventory";
@@ -99,6 +100,7 @@ export function FuelInventoryClient() {
     }>
   >([]);
   const [stationPumpsLoading, setStationPumpsLoading] = useState(false);
+  const [wizardVisible, setWizardVisible] = useState(false);
   const [pumpStateByStation, setPumpStateByStation] = useState<Record<string, Awaited<ReturnType<typeof fetchStationPumpMeterState>>>>({});
 
   const [deliveryModalOpen, setDeliveryModalOpen] = useState(false);
@@ -231,6 +233,11 @@ export function FuelInventoryClient() {
     });
   }, [result]);
 
+  const selectedBaselinePanelRow = useMemo(
+    () => baselinePanelRows.find((row) => row.station.id === baselineStationId) ?? null,
+    [baselinePanelRows, baselineStationId]
+  );
+
   const groupedSummaryRows = useMemo(() => {
     const rows = result?.summaryRows ?? [];
     const grouped = new Map<string, { stationId: string; stationName: string; rows: typeof rows }>();
@@ -262,6 +269,10 @@ export function FuelInventoryClient() {
       const stationId = stationFilter === "ALL" ? (result?.stations[0]?.id ?? "") : stationFilter;
       const selectedStationId = baselineStationId || stationId;
       if (!selectedStationId) throw new Error("Select a station before creating baseline");
+      const stationRow = baselinePanelRows.find((row) => row.station.id === selectedStationId) ?? null;
+      if (stationRow?.status === "finalized" || stationRow?.status === "voided") {
+        throw new Error("This station already has a finalized baseline. Void it first if you need to recreate it.");
+      }
       if (finalize && meterRows.length === 0) {
         if (role !== "Owner") throw new Error("Only Owner profiles can confirm finalization without pump rows.");
         const allowWithoutPumps = window.confirm("No active pumps are set up for this station. Finalize baseline without pump rows?");
@@ -288,6 +299,7 @@ export function FuelInventoryClient() {
       if (finalize) await finalizeFuelOpeningBaseline(baselineId);
       setMessage(finalize ? "Baseline created and finalized." : "Baseline draft saved.");
       await reload();
+      if (finalize) setWizardVisible(false);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Unable to save baseline");
     }
@@ -302,6 +314,25 @@ export function FuelInventoryClient() {
       await reload();
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Unable to void baseline");
+    }
+  }
+
+  function handleOpenWizard(stationId: string, mode: "create" | "continue" | "view") {
+    setBaselineStationId(stationId);
+    setWizardVisible(mode !== "view");
+  }
+
+  async function handleInitializePumpReading(stationId: string, pumpId: string, openingReading: number) {
+    try {
+      await recordPumpMeterReadings({
+        station_id: stationId,
+        source: "baseline",
+        readings: [{ pump_id: pumpId, closing_meter_reading: openingReading, notes: "Initialized after baseline finalization" }]
+      });
+      setMessage("Pump reading initialized.");
+      await reload();
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Unable to initialize pump reading");
     }
   }
 
@@ -444,9 +475,19 @@ export function FuelInventoryClient() {
                     <td className="pr-4 text-right tabular-nums">{formatLiters(row.special)}</td>
                     <td className="pr-4 text-right tabular-nums">{formatLiters(row.unleaded)}</td>
                     <td>
-                      <span className="text-slate-700">
-                        {row.status === "missing" ? "Create baseline" : row.status === "draft" ? "Continue draft" : "View baseline"}
-                      </span>
+                      <Button
+                        onClick={() => handleOpenWizard(row.station.id, row.status === "missing" ? "create" : row.status === "draft" ? "continue" : "view")}
+                        size="sm"
+                        variant="outline"
+                      >
+                        {row.status === "missing"
+                          ? "Create baseline"
+                          : row.status === "draft"
+                            ? "Continue draft"
+                            : row.status === "voided"
+                              ? "Create new baseline"
+                              : "View baseline"}
+                      </Button>
                       {row.baseline ? (
                         <Button className="ml-2" onClick={() => handleVoidBaseline(row.baseline!.id)} size="sm" variant="outline">
                           Void
@@ -461,6 +502,7 @@ export function FuelInventoryClient() {
         </CardContent>
       </Card>
 
+      {wizardVisible ? (
       <Card>
         <CardHeader>
           <CardTitle>Opening Baseline Wizard</CardTitle>
@@ -518,10 +560,68 @@ export function FuelInventoryClient() {
             <Button disabled={role !== "Owner"} onClick={() => handleSaveBaseline(true)}>
               Finalize baseline
             </Button>
+            <Button onClick={() => setWizardVisible(false)} type="button" variant="ghost">
+              Close
+            </Button>
           </div>
           {role !== "Owner" ? <p className="text-sm text-amber-700">Only Owner profiles can finalize opening baselines.</p> : null}
         </CardContent>
       </Card>
+      ) : null}
+
+      {selectedBaselinePanelRow?.status === "finalized" && selectedBaselinePanelRow.baseline ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Finalized baseline summary</CardTitle>
+            <CardDescription>
+              Baseline at {new Date(selectedBaselinePanelRow.baseline.baseline_at).toLocaleString()}
+              {selectedBaselinePanelRow.baseline.finalized_at
+                ? ` • Finalized ${new Date(selectedBaselinePanelRow.baseline.finalized_at).toLocaleString()}`
+                : ""}
+              {selectedBaselinePanelRow.baseline.finalized_by ? ` • By ${selectedBaselinePanelRow.baseline.finalized_by}` : ""}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4 text-sm">
+            <div className="grid gap-2 md:grid-cols-3">
+              <div>Diesel opening liters: <span className="font-semibold">{formatLiters(selectedBaselinePanelRow.diesel)}</span></div>
+              <div>Special opening liters: <span className="font-semibold">{formatLiters(selectedBaselinePanelRow.special)}</span></div>
+              <div>Unleaded opening liters: <span className="font-semibold">{formatLiters(selectedBaselinePanelRow.unleaded)}</span></div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-left text-slate-500">
+                  <tr>
+                    <th className="py-1">Pump label</th>
+                    <th>Product</th>
+                    <th className="text-right">Opening meter reading</th>
+                    <th>Source</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(pumpStateByStation[selectedBaselinePanelRow.station.id] ?? []).map((pump) => (
+                    <tr className="border-t" key={pump.pump_id}>
+                      <td className="py-1">{pump.pump_label}</td>
+                      <td>{pump.product_code ?? "-"}</td>
+                      <td className="text-right">{pump.latest_opening_meter_reading ?? "-"}</td>
+                      <td>{pump.latest_source ?? "baseline"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {(pumpStateByStation[selectedBaselinePanelRow.station.id] ?? [])
+              .filter((pump) => pump.latest_reading_at == null)
+              .map((pump) => (
+                <div className="flex items-center justify-between rounded border border-amber-200 bg-amber-50 p-2 text-amber-800" key={`missing-${pump.pump_id}`}>
+                  <p>Pump {pump.pump_label} has no starting meter reading.</p>
+                  <Button onClick={() => handleInitializePumpReading(selectedBaselinePanelRow.station.id, pump.pump_id, 0)} size="sm" variant="outline">
+                    Initialize pump reading
+                  </Button>
+                </div>
+              ))}
+          </CardContent>
+        </Card>
+      ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <Card>
