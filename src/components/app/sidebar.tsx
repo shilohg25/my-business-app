@@ -7,7 +7,8 @@ import { cn } from "@/lib/utils";
 import { appPath } from "@/lib/supabase/client";
 import { sidebarItems } from "@/lib/navigation/sidebar-items";
 import { getVisibleNavItemsForRole } from "@/lib/auth/role-access";
-import { fetchCurrentProfile, type AppRole } from "@/lib/data/profile";
+import { fetchCurrentProfile } from "@/lib/data/profile";
+import type { AppRole } from "@/types/auth";
 
 type SidebarProps = {
   mobileOpen?: boolean;

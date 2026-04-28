@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { canAccessRoute, getDefaultRouteForRole } from "@/lib/auth/role-access";
-import { fetchCurrentProfile, type AppRole } from "@/lib/data/profile";
+import { fetchCurrentProfile } from "@/lib/data/profile";
+import type { AppRole } from "@/types/auth";
 import { appPath, stripAppBasePath } from "@/lib/supabase/client";
 
 export function AppRouteGuard({ children }: { children: React.ReactNode }) {

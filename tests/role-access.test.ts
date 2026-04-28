@@ -32,15 +32,22 @@ describe("role access", () => {
     expect(canAccessRoute("User", "/dashboard/")).toBe(false);
   });
 
+
+  it("audit logs and settings are owner-only routes", () => {
+    expect(canAccessRoute("Owner", "/audit-logs/")).toBe(true);
+    expect(canAccessRoute("Admin", "/audit-logs/")).toBe(false);
+    expect(canAccessRoute("Co-Owner", "/settings/")).toBe(false);
+  });
+
   it("Owner can access all", () => {
     expect(canAccessRoute("Owner", "/inventory/fuel/")).toBe(true);
     expect(canAccessRoute("Owner", "/settings/")).toBe(true);
   });
 
-  it("only Owner/Admin can create manual shift reports", () => {
+  it("non-user roles can create manual shift reports", () => {
     expect(canCreateManualShiftReport("Owner")).toBe(true);
     expect(canCreateManualShiftReport("Admin")).toBe(true);
-    expect(canCreateManualShiftReport("Co-Owner")).toBe(false);
+    expect(canCreateManualShiftReport("Co-Owner")).toBe(true);
     expect(canCreateManualShiftReport("User")).toBe(false);
   });
 

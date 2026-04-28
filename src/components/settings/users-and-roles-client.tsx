@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { fetchCurrentProfile, type AppRole } from "@/lib/data/profile";
+import { fetchCurrentProfile } from "@/lib/data/profile";
+import type { AppRole } from "@/types/auth";
 import { activateProfileByEmail, deactivateUser, listUsersForOwner, updateUserRole, type OwnerUserRow } from "@/lib/data/admin-users";
 
 const roles: AppRole[] = ["Owner", "Co-Owner", "Admin", "User"];

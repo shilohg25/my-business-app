@@ -1,5 +1,4 @@
-export type AppRole = "Owner" | "Co-Owner" | "Admin" | "User";
-
+import type { AppRole } from "@/types/auth";
 export type Permission =
   | "read"
   | "create"
@@ -8,12 +7,25 @@ export type Permission =
   | "approve"
   | "export"
   | "manageUsers"
-  | "viewAudit";
+  | "viewAudit"
+  | "manageCriticalSettings"
+  | "restoreRecords";
 
 const rolePermissions: Record<AppRole, Permission[]> = {
-  Owner: ["read", "create", "edit", "archive", "approve", "export", "manageUsers", "viewAudit"],
-  "Co-Owner": ["read", "export", "viewAudit"],
-  Admin: ["read", "create", "edit", "export", "viewAudit"],
+  Owner: [
+    "read",
+    "create",
+    "edit",
+    "archive",
+    "approve",
+    "export",
+    "manageUsers",
+    "viewAudit",
+    "manageCriticalSettings",
+    "restoreRecords"
+  ],
+  "Co-Owner": ["read", "create", "edit", "archive", "approve", "export"],
+  Admin: ["read", "create", "edit", "archive", "export"],
   User: ["read"]
 };
 
@@ -22,6 +34,10 @@ export function hasPermission(role: AppRole | string | null | undefined, permiss
   return rolePermissions[role as AppRole].includes(permission);
 }
 
-export function requireEditReason(role: AppRole | string | null | undefined) {
-  return role === "Admin";
+export function requiresActionExplanation(role: AppRole | string | null | undefined) {
+  return role === "Admin" || role === "Co-Owner";
+}
+
+export function isOwnerRole(role: AppRole | string | null | undefined) {
+  return role === "Owner";
 }
