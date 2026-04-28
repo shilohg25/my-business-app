@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { FuelDeliveryForm } from "@/components/fuel-deliveries/fuel-delivery-form";
 import { fetchAllowedDeliveryStations, type AllowedDeliveryStation } from "@/lib/data/fuel-deliveries";
 import { canUseLiveData } from "@/lib/data/client";
+import { fetchActiveStationPumps, type ActiveStationPumpRow } from "@/lib/data/stations";
 import {
   createFuelOpeningBaseline,
   fetchFuelInventoryDashboard,
@@ -81,11 +82,22 @@ export function FuelInventoryClient() {
   const [result, setResult] = useState<Awaited<ReturnType<typeof fetchFuelInventoryDashboard>> | null>(null);
 
   const [baselineDateTime, setBaselineDateTime] = useState(`${new Date().toISOString().slice(0, 10)}T00:00`);
+  const [baselineStationId, setBaselineStationId] = useState(initialStation === "ALL" ? "" : initialStation);
   const [baselineNotes, setBaselineNotes] = useState("");
   const [dieselOpening, setDieselOpening] = useState("0");
   const [specialOpening, setSpecialOpening] = useState("0");
   const [unleadedOpening, setUnleadedOpening] = useState("0");
-  const [meterRows, setMeterRows] = useState([{ pump_label: "", product_code: "DIESEL", nozzle_label: "", opening_meter_reading: "0", notes: "" }]);
+  const [meterRows, setMeterRows] = useState<
+    Array<{
+      pump_id: string;
+      pump_label_snapshot: string;
+      product_code_snapshot: ActiveStationPumpRow["product_code"];
+      nozzle_label: string;
+      opening_meter_reading: string;
+      notes: string;
+    }>
+  >([]);
+  const [stationPumpsLoading, setStationPumpsLoading] = useState(false);
 
   const [deliveryModalOpen, setDeliveryModalOpen] = useState(false);
   const [deliverySaving, setDeliverySaving] = useState(false);
@@ -122,6 +134,35 @@ export function FuelInventoryClient() {
   }, [datePreset]);
 
   const hasActiveFilters = !areFiltersDefault({ stationFilter, productFilter, datePreset, startDate, endDate }, defaultFilters);
+
+  useEffect(() => {
+    if (!result?.stations?.length) return;
+    setBaselineStationId((prev) => (prev ? prev : result.stations[0].id));
+  }, [result?.stations]);
+
+  useEffect(() => {
+    if (!liveData || !baselineStationId) {
+      setMeterRows([]);
+      return;
+    }
+
+    setStationPumpsLoading(true);
+    fetchActiveStationPumps(baselineStationId)
+      .then((rows) =>
+        setMeterRows(
+          rows.map((row) => ({
+            pump_id: row.pump_id,
+            pump_label_snapshot: row.pump_label,
+            product_code_snapshot: row.product_code,
+            nozzle_label: "",
+            opening_meter_reading: "0",
+            notes: ""
+          }))
+        )
+      )
+      .catch((nextError: Error) => setError(nextError.message))
+      .finally(() => setStationPumpsLoading(false));
+  }, [liveData, baselineStationId]);
 
   function resetFilters() {
     const nextDefaults = getCurrentMonthDateRange();
@@ -215,9 +256,15 @@ export function FuelInventoryClient() {
     setMessage(null);
     try {
       const stationId = stationFilter === "ALL" ? (result?.stations[0]?.id ?? "") : stationFilter;
-      if (!stationId) throw new Error("Select a station before creating baseline");
+      const selectedStationId = baselineStationId || stationId;
+      if (!selectedStationId) throw new Error("Select a station before creating baseline");
+      if (finalize && meterRows.length === 0) {
+        if (role !== "Owner") throw new Error("Only Owner profiles can confirm finalization without pump rows.");
+        const allowWithoutPumps = window.confirm("No active pumps are set up for this station. Finalize baseline without pump rows?");
+        if (!allowWithoutPumps) return;
+      }
       const baselineId = await createFuelOpeningBaseline({
-        station_id: stationId,
+        station_id: selectedStationId,
         baseline_at: new Date(baselineDateTime).toISOString(),
         notes: baselineNotes || null,
         products: [
@@ -226,8 +273,9 @@ export function FuelInventoryClient() {
           { product_code: "UNLEADED", opening_liters: toNum(unleadedOpening) }
         ],
         meters: meterRows.map((row) => ({
-          pump_label: row.pump_label,
-          product_code: row.product_code,
+          pump_id: row.pump_id,
+          pump_label_snapshot: row.pump_label_snapshot,
+          product_code_snapshot: row.product_code_snapshot,
           nozzle_label: row.nozzle_label || null,
           opening_meter_reading: toNum(row.opening_meter_reading),
           notes: row.notes || null
@@ -416,8 +464,8 @@ export function FuelInventoryClient() {
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="grid gap-2 md:grid-cols-3">
-            <select className="rounded-md border px-3 py-2 text-sm" value={stationFilter} onChange={(e) => setStationFilter(e.target.value)}>
-              <option value="ALL">Select station</option>
+            <select className="rounded-md border px-3 py-2 text-sm" value={baselineStationId} onChange={(e) => setBaselineStationId(e.target.value)}>
+              <option value="">Select station</option>
               {(result?.stations ?? []).map((station) => (
                 <option key={station.id} value={station.id}>
                   {station.name}
@@ -432,22 +480,16 @@ export function FuelInventoryClient() {
             <Input type="number" step="0.001" placeholder="Special remaining liters" value={specialOpening} onChange={(e) => setSpecialOpening(e.target.value)} />
             <Input type="number" step="0.001" placeholder="Unleaded remaining liters" value={unleadedOpening} onChange={(e) => setUnleadedOpening(e.target.value)} />
           </div>
+          {!stationPumpsLoading && baselineStationId && meterRows.length === 0 ? (
+            <p className="rounded border border-amber-200 bg-amber-50 p-2 text-sm text-amber-800">
+              No active pumps are set up for this station. Go to Stations to add pumps before creating a baseline.
+            </p>
+          ) : null}
+          {stationPumpsLoading ? <p className="text-sm text-slate-500">Loading station pumps...</p> : null}
           {meterRows.map((row, index) => (
             <div className="grid gap-2 md:grid-cols-5" key={`meter-${index}`}>
-              <Input
-                placeholder="Pump label"
-                value={row.pump_label}
-                onChange={(e) => setMeterRows((prev) => prev.map((x, i) => (i === index ? { ...x, pump_label: e.target.value } : x)))}
-              />
-              <select
-                className="rounded-md border px-3 py-2 text-sm"
-                value={row.product_code}
-                onChange={(e) => setMeterRows((prev) => prev.map((x, i) => (i === index ? { ...x, product_code: e.target.value } : x)))}
-              >
-                <option>DIESEL</option>
-                <option>SPECIAL</option>
-                <option>UNLEADED</option>
-              </select>
+              <Input value={row.pump_label_snapshot} readOnly />
+              <Input value={row.product_code_snapshot} readOnly />
               <Input
                 placeholder="Nozzle label"
                 value={row.nozzle_label}
@@ -468,9 +510,6 @@ export function FuelInventoryClient() {
             </div>
           ))}
           <div className="flex gap-2">
-            <Button onClick={() => setMeterRows((prev) => [...prev, { pump_label: "", product_code: "DIESEL", nozzle_label: "", opening_meter_reading: "0", notes: "" }])} variant="outline">
-              Add meter row
-            </Button>
             <Button onClick={() => handleSaveBaseline(false)}>Save draft baseline</Button>
             <Button disabled={role !== "Owner"} onClick={() => handleSaveBaseline(true)}>
               Finalize baseline

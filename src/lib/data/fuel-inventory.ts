@@ -144,7 +144,14 @@ export async function createFuelOpeningBaseline(payload: {
   baseline_at: string;
   notes?: string | null;
   products: Array<{ product_code: string; opening_liters: number; tank_label?: string | null; notes?: string | null }>;
-  meters: Array<{ pump_id?: string | null; pump_label: string; product_code: string; nozzle_label?: string | null; opening_meter_reading: number; notes?: string | null }>;
+  meters: Array<{
+    pump_id?: string | null;
+    pump_label_snapshot: string;
+    product_code_snapshot: string;
+    nozzle_label?: string | null;
+    opening_meter_reading: number;
+    notes?: string | null;
+  }>;
   allow_replace?: boolean;
   allow_partial?: boolean;
 }) {

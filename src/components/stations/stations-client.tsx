@@ -19,7 +19,7 @@ import { appPath, getSupabaseConfigurationState } from "@/lib/supabase/client";
 
 const PRODUCT_OPTIONS: Array<StationMeterRow["product_type"]> = ["DIESEL", "SPECIAL", "UNLEADED"];
 
-type DraftByStation = Record<string, { product_type: StationMeterRow["product_type"]; meter_label: string; display_order: string; is_active: boolean }>;
+type DraftByStation = Record<string, { product_type: StationMeterRow["product_type"]; meter_label: string; is_active: boolean }>;
 
 export function StationsClient() {
   const liveData = canUseLiveData();
@@ -113,7 +113,7 @@ export function StationsClient() {
   }
 
   function readStationDraft(stationId: string) {
-    return meterDrafts[stationId] ?? { product_type: "DIESEL", meter_label: "", display_order: "0", is_active: true };
+    return meterDrafts[stationId] ?? { product_type: "DIESEL", meter_label: "", is_active: true };
   }
 
   function patchDraft(stationId: string, next: Partial<DraftByStation[string]>) {
@@ -140,13 +140,12 @@ export function StationsClient() {
         station_id: stationId,
         product_type: draft.product_type,
         meter_label: draft.meter_label.trim(),
-        display_order: Number(draft.display_order || "0"),
         is_active: draft.is_active
       });
       setMessage("Station meter saved.");
       setMeterDrafts((prev) => ({
         ...prev,
-        [stationId]: { product_type: "DIESEL", meter_label: "", display_order: "0", is_active: true }
+        [stationId]: { product_type: "DIESEL", meter_label: "", is_active: true }
       }));
       await reload();
     } catch (err) {
@@ -167,7 +166,6 @@ export function StationsClient() {
         station_id: meter.station_id,
         product_type: patch.product_type ?? meter.product_type,
         meter_label: patch.meter_label ?? meter.meter_label,
-        display_order: patch.display_order ?? meter.display_order,
         is_active: patch.is_active ?? meter.is_active
       });
       setMessage("Station meter updated.");
@@ -293,7 +291,7 @@ export function StationsClient() {
       {canManageMeters ? (
         <div className="rounded-2xl border bg-white p-4 sm:p-5">
           <h2 className="text-lg font-semibold">Station meter setup</h2>
-          <p className="mt-1 text-sm text-slate-500">Owner/Admin can manage product, meter label, display order, and active status.</p>
+          <p className="mt-1 text-sm text-slate-500">Owner/Admin can manage product assignment, meter label, and active status.</p>
 
           <div className="mt-4 space-y-6">
             {stationOrder.map((station) => {
@@ -314,7 +312,6 @@ export function StationsClient() {
                         <tr>
                           <th className="py-2">Product</th>
                           <th>Meter label</th>
-                          <th>Display order</th>
                           <th>Active</th>
                           <th>Actions</th>
                         </tr>
@@ -347,19 +344,6 @@ export function StationsClient() {
                               />
                             </td>
                             <td>
-                              <Input
-                                type="number"
-                                min={0}
-                                onBlur={(event) => {
-                                  const next = Number(event.target.value);
-                                  if (!Number.isNaN(next) && next !== meter.display_order) {
-                                    void updateMeterField(station.id, meter, { display_order: next });
-                                  }
-                                }}
-                                defaultValue={meter.display_order}
-                              />
-                            </td>
-                            <td>
                               <label className="inline-flex items-center gap-2 text-sm">
                                 <input
                                   type="checkbox"
@@ -384,7 +368,7 @@ export function StationsClient() {
                         ))}
                         {station.meters.length === 0 ? (
                           <tr className="border-t">
-                            <td className="py-2 text-slate-500" colSpan={5}>
+                            <td className="py-2 text-slate-500" colSpan={4}>
                               No station meters configured.
                             </td>
                           </tr>
@@ -393,7 +377,7 @@ export function StationsClient() {
                     </table>
                   </div>
 
-                  <div className="mt-3 grid gap-2 sm:grid-cols-5">
+                  <div className="mt-3 grid gap-2 sm:grid-cols-4">
                     <select
                       className="h-10 rounded-md border border-input bg-background px-2 text-sm"
                       value={draft.product_type}
@@ -409,13 +393,6 @@ export function StationsClient() {
                       placeholder="Meter label (e.g., D1)"
                       value={draft.meter_label}
                       onChange={(event) => patchDraft(station.id, { meter_label: event.target.value })}
-                    />
-                    <Input
-                      type="number"
-                      min={0}
-                      placeholder="Display order"
-                      value={draft.display_order}
-                      onChange={(event) => patchDraft(station.id, { display_order: event.target.value })}
                     />
                     <label className="inline-flex items-center gap-2 rounded-md border px-3 text-sm">
                       <input

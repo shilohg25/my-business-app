@@ -11,6 +11,16 @@ export interface StationMeterRow {
   is_active: boolean;
 }
 
+export interface ActiveStationPumpRow {
+  pump_id: string;
+  station_id: string;
+  pump_label: string;
+  product_id: string;
+  product_code: "DIESEL" | "SPECIAL" | "UNLEADED";
+  product_name: string;
+  is_active: boolean;
+}
+
 export interface StationManagementRow {
   id: string;
   code: string;
@@ -39,6 +49,20 @@ function parseProductCode(value: string | null | undefined): ProductCode {
   return DEFAULT_PRODUCT_TYPE;
 }
 
+const productSortOrder: Record<ProductCode, number> = {
+  DIESEL: 0,
+  SPECIAL: 1,
+  UNLEADED: 2
+};
+
+function sortPumpsByProductAndLabel<T extends { product_type: ProductCode; meter_label: string }>(rows: T[]) {
+  return [...rows].sort((a, b) => {
+    const byProduct = productSortOrder[a.product_type] - productSortOrder[b.product_type];
+    if (byProduct !== 0) return byProduct;
+    return a.meter_label.localeCompare(b.meter_label);
+  });
+}
+
 export async function fetchStationManagementData(): Promise<StationManagementResult> {
   if (!canUseLiveData()) return { role: null, canCreateStation: false, canManageMeters: false, rows: [] };
 
@@ -65,9 +89,7 @@ export async function fetchStationManagementData(): Promise<StationManagementRes
   const [locationsResult, baselinesResult, pumpsResult] = await Promise.all([
     supabase.from("fuel_inventory_locations").select("station_id, code").eq("location_type", "station").in("station_id", ids),
     supabase.from("fuel_station_fuel_baselines").select("id, station_id, status, baseline_at").in("station_id", ids),
-    canManageMeters
-      ? supabase.from("fuel_pumps").select("id, station_id, pump_label, display_order, is_active").in("station_id", ids).order("display_order", { ascending: true })
-      : Promise.resolve({ data: [], error: null })
+    canManageMeters ? supabase.from("fuel_pumps").select("id, station_id, pump_label, display_order, is_active").in("station_id", ids) : Promise.resolve({ data: [], error: null })
   ]);
 
   const baseErrors = [locationsResult.error, baselinesResult.error, pumpsResult.error].filter(Boolean);
@@ -157,9 +179,65 @@ export async function fetchStationManagementData(): Promise<StationManagementRes
       ...station,
       inventory_location_code: locationByStation.get(station.id) ?? null,
       fuel_baseline_status: latestBaselineByStation.get(station.id)?.status ?? "missing",
-      meters: metersByStation.get(station.id) ?? []
+      meters: sortPumpsByProductAndLabel(metersByStation.get(station.id) ?? [])
     }))
   };
+}
+
+export async function fetchActiveStationPumps(stationId: string): Promise<ActiveStationPumpRow[]> {
+  if (!canUseLiveData() || !stationId) return [];
+
+  const supabase = createSupabaseBrowserClient();
+  const { data, error } = await supabase
+    .from("fuel_pumps")
+    .select("id, station_id, pump_label, is_active, fuel_pump_product_assignments(product_id, effective_from, fuel_products(id, code, name))")
+    .eq("station_id", stationId)
+    .eq("is_active", true)
+    .eq("fuel_pump_product_assignments.is_active", true)
+    .is("fuel_pump_product_assignments.effective_to", null);
+
+  if (error) throw new Error(`Unable to load station pumps: ${error.message}`);
+
+  const rows = (data ?? []) as Array<{
+    id: string;
+    station_id: string;
+    pump_label: string;
+    is_active: boolean;
+    fuel_pump_product_assignments:
+      | Array<{
+          product_id: string;
+          effective_from: string;
+          fuel_products: { id: string; code: string; name: string } | Array<{ id: string; code: string; name: string }> | null;
+        }>
+      | null;
+  }>;
+
+  const mapped = rows
+    .map((row) => {
+      const activeAssignments = (row.fuel_pump_product_assignments ?? [])
+        .filter((assignment) => assignment && assignment.product_id)
+        .sort((a, b) => (b.effective_from ?? "").localeCompare(a.effective_from ?? ""));
+      const latest = activeAssignments[0];
+      const product = Array.isArray(latest?.fuel_products) ? latest?.fuel_products[0] : latest?.fuel_products;
+      const productCode = parseProductCode(product?.code);
+      if (!latest || !product) return null;
+      return {
+        pump_id: row.id,
+        station_id: row.station_id,
+        pump_label: row.pump_label,
+        product_id: latest.product_id,
+        product_code: productCode,
+        product_name: product.name,
+        is_active: row.is_active
+      } as ActiveStationPumpRow;
+    })
+    .filter((row): row is ActiveStationPumpRow => Boolean(row));
+
+  return mapped.sort((a, b) => {
+    const byProduct = productSortOrder[a.product_code] - productSortOrder[b.product_code];
+    if (byProduct !== 0) return byProduct;
+    return a.pump_label.localeCompare(b.pump_label);
+  });
 }
 
 export async function createStation(payload: {
@@ -210,7 +288,7 @@ export async function upsertStationMeter(payload: {
   const meterPatch = {
     station_id: payload.station_id,
     pump_label: payload.meter_label,
-    display_order: payload.display_order ?? 0,
+    display_order: 0,
     is_active: payload.is_active ?? true
   };
 
@@ -290,7 +368,7 @@ export async function upsertStationMeter(payload: {
     station_id: payload.station_id,
     product_type: parseProductCode(product.code),
     meter_label: payload.meter_label,
-    display_order: payload.display_order ?? 0,
+    display_order: 0,
     is_active: payload.is_active ?? true
   } as StationMeterRow;
 }
