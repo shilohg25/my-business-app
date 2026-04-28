@@ -1,6 +1,8 @@
 import { canUseLiveData } from "@/lib/data/client";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
+export const STATION_ASSIGNMENT_RPC_MISSING_MESSAGE = "Station assignment database functions are missing. Run the latest Supabase SQL migration.";
+
 export interface AssignableUser {
   user_id: string;
   email: string | null;
@@ -28,6 +30,36 @@ export interface StationAssignmentRow {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+}
+
+function isRpcSchemaMissingError(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+
+  const errorWithMetadata = error as { code?: string; message?: string; details?: string; hint?: string };
+  const searchableText = [errorWithMetadata.message, errorWithMetadata.details, errorWithMetadata.hint]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return (
+    errorWithMetadata.code === "PGRST202" ||
+    errorWithMetadata.code === "42883" ||
+    searchableText.includes("could not find the function") ||
+    searchableText.includes("function") && searchableText.includes("does not exist") ||
+    searchableText.includes("schema cache") && searchableText.includes("reload")
+  );
+}
+
+export function normalizeStationAssignmentError(error: unknown, fallback: string) {
+  if (isRpcSchemaMissingError(error)) {
+    return STATION_ASSIGNMENT_RPC_MISSING_MESSAGE;
+  }
+
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return fallback;
 }
 
 export async function listAssignableUsers() {
