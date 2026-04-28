@@ -8,6 +8,7 @@ import {
   listAssignableUsers,
   listStationAssignments,
   setStationAssignment,
+  normalizeStationAssignmentError,
   type AssignableStation,
   type AssignableUser,
   type StationAssignmentRow
@@ -61,7 +62,7 @@ export function StationAssignmentsClient() {
 
   useEffect(() => {
     loadAll()
-      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load station assignments"))
+      .catch((err) => setError(normalizeStationAssignmentError(err, "Failed to load station assignments")))
       .finally(() => setLoading(false));
   }, []);
 
@@ -80,7 +81,7 @@ export function StationAssignmentsClient() {
       setMessage(isActive ? "Assignment saved as active." : "Assignment saved as inactive.");
       await loadAll();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to save assignment");
+      setError(normalizeStationAssignmentError(err, "Unable to save assignment"));
     } finally {
       setSubmitting(false);
     }
@@ -169,7 +170,7 @@ export function StationAssignmentsClient() {
                             setMessage(!assignment.is_active ? "Assignment activated." : "Assignment deactivated.");
                             await loadAll();
                           } catch (err) {
-                            setError(err instanceof Error ? err.message : "Unable to update assignment status");
+                            setError(normalizeStationAssignmentError(err, "Unable to update assignment status"));
                           }
                         }}
                       >
