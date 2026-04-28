@@ -1,14 +1,25 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SimpleModal } from "@/components/ui/simple-modal";
-import { createStation, fetchStationManagementData, type StationManagementRow } from "@/lib/data/stations";
+import {
+  archiveStationMeter,
+  createStation,
+  fetchStationManagementData,
+  upsertStationMeter,
+  type StationManagementRow,
+  type StationMeterRow
+} from "@/lib/data/stations";
 import { canUseLiveData } from "@/lib/data/client";
 import { isBlank, getErrorMessage } from "@/lib/utils/forms";
 import { appPath, getSupabaseConfigurationState } from "@/lib/supabase/client";
+
+const PRODUCT_OPTIONS: Array<StationMeterRow["product_type"]> = ["DIESEL", "SPECIAL", "UNLEADED"];
+
+type DraftByStation = Record<string, { product_type: StationMeterRow["product_type"]; meter_label: string; display_order: string; is_active: boolean }>;
 
 export function StationsClient() {
   const liveData = canUseLiveData();
@@ -17,6 +28,7 @@ export function StationsClient() {
   const [stations, setStations] = useState<StationManagementRow[]>([]);
   const [role, setRole] = useState<string | null>(null);
   const [canCreateStation, setCanCreateStation] = useState(false);
+  const [canManageMeters, setCanManageMeters] = useState(false);
   const [loading, setLoading] = useState(liveData);
   const [roleChecking, setRoleChecking] = useState(liveData);
   const [error, setError] = useState<string | null>(null);
@@ -30,12 +42,16 @@ export function StationsClient() {
   const [submitting, setSubmitting] = useState(false);
   const [openModal, setOpenModal] = useState(false);
 
+  const [meterDrafts, setMeterDrafts] = useState<DraftByStation>({});
+  const [meterSubmitting, setMeterSubmitting] = useState<string | null>(null);
+
   const reload = async () => {
     if (!liveData) return;
     const data = await fetchStationManagementData();
     setStations(data.rows);
     setRole(data.role);
     setCanCreateStation(data.canCreateStation);
+    setCanManageMeters(data.canManageMeters);
     setRoleChecking(false);
   };
 
@@ -53,6 +69,8 @@ export function StationsClient() {
       .catch((err) => setError(getErrorMessage(err)))
       .finally(() => setLoading(false));
   }, [liveData]);
+
+  const stationOrder = useMemo(() => [...stations].sort((a, b) => a.name.localeCompare(b.name)), [stations]);
 
   function closeCreateModal() {
     if (submitting) return;
@@ -91,6 +109,89 @@ export function StationsClient() {
       setModalError(getErrorMessage(err));
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  function readStationDraft(stationId: string) {
+    return meterDrafts[stationId] ?? { product_type: "DIESEL", meter_label: "", display_order: "0", is_active: true };
+  }
+
+  function patchDraft(stationId: string, next: Partial<DraftByStation[string]>) {
+    const current = readStationDraft(stationId);
+    setMeterDrafts((prev) => ({
+      ...prev,
+      [stationId]: { ...current, ...next }
+    }));
+  }
+
+  async function submitNewMeter(stationId: string) {
+    if (!canManageMeters) return;
+    const draft = readStationDraft(stationId);
+    if (isBlank(draft.meter_label)) {
+      setError("Meter label is required.");
+      return;
+    }
+
+    setMeterSubmitting(stationId);
+    setError(null);
+    setMessage(null);
+    try {
+      await upsertStationMeter({
+        station_id: stationId,
+        product_type: draft.product_type,
+        meter_label: draft.meter_label.trim(),
+        display_order: Number(draft.display_order || "0"),
+        is_active: draft.is_active
+      });
+      setMessage("Station meter saved.");
+      setMeterDrafts((prev) => ({
+        ...prev,
+        [stationId]: { product_type: "DIESEL", meter_label: "", display_order: "0", is_active: true }
+      }));
+      await reload();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setMeterSubmitting(null);
+    }
+  }
+
+  async function updateMeterField(stationId: string, meter: StationMeterRow, patch: Partial<StationMeterRow>) {
+    if (!canManageMeters) return;
+    setMeterSubmitting(stationId);
+    setError(null);
+    setMessage(null);
+    try {
+      await upsertStationMeter({
+        id: meter.id,
+        station_id: meter.station_id,
+        product_type: patch.product_type ?? meter.product_type,
+        meter_label: patch.meter_label ?? meter.meter_label,
+        display_order: patch.display_order ?? meter.display_order,
+        is_active: patch.is_active ?? meter.is_active
+      });
+      setMessage("Station meter updated.");
+      await reload();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setMeterSubmitting(null);
+    }
+  }
+
+  async function archiveMeter(stationId: string, meterId: string) {
+    if (!canManageMeters) return;
+    setMeterSubmitting(stationId);
+    setError(null);
+    setMessage(null);
+    try {
+      await archiveStationMeter(meterId);
+      setMessage("Station meter archived.");
+      await reload();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setMeterSubmitting(null);
     }
   }
 
@@ -188,6 +289,152 @@ export function StationsClient() {
           </div>
         ) : null}
       </div>
+
+      {canManageMeters ? (
+        <div className="rounded-2xl border bg-white p-4 sm:p-5">
+          <h2 className="text-lg font-semibold">Station meter setup</h2>
+          <p className="mt-1 text-sm text-slate-500">Owner/Admin can manage product, meter label, display order, and active status.</p>
+
+          <div className="mt-4 space-y-6">
+            {stationOrder.map((station) => {
+              const draft = readStationDraft(station.id);
+              return (
+                <div className="rounded-xl border p-3" key={station.id}>
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <div>
+                      <p className="font-medium">{station.name}</p>
+                      <p className="text-xs text-slate-500">Code: {station.code}</p>
+                    </div>
+                    <Badge>{station.meters.filter((meter) => meter.is_active).length} active</Badge>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[720px] text-sm">
+                      <thead className="text-left text-slate-500">
+                        <tr>
+                          <th className="py-2">Product</th>
+                          <th>Meter label</th>
+                          <th>Display order</th>
+                          <th>Active</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {station.meters.map((meter) => (
+                          <tr className="border-t" key={meter.id}>
+                            <td className="py-2">
+                              <select
+                                className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                                onChange={(event) => updateMeterField(station.id, meter, { product_type: event.target.value as StationMeterRow["product_type"] })}
+                                value={meter.product_type}
+                              >
+                                {PRODUCT_OPTIONS.map((value) => (
+                                  <option key={value} value={value}>
+                                    {value}
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
+                            <td>
+                              <Input
+                                onBlur={(event) => {
+                                  const next = event.target.value.trim();
+                                  if (next && next !== meter.meter_label) {
+                                    void updateMeterField(station.id, meter, { meter_label: next });
+                                  }
+                                }}
+                                defaultValue={meter.meter_label}
+                              />
+                            </td>
+                            <td>
+                              <Input
+                                type="number"
+                                min={0}
+                                onBlur={(event) => {
+                                  const next = Number(event.target.value);
+                                  if (!Number.isNaN(next) && next !== meter.display_order) {
+                                    void updateMeterField(station.id, meter, { display_order: next });
+                                  }
+                                }}
+                                defaultValue={meter.display_order}
+                              />
+                            </td>
+                            <td>
+                              <label className="inline-flex items-center gap-2 text-sm">
+                                <input
+                                  type="checkbox"
+                                  checked={meter.is_active}
+                                  onChange={(event) => updateMeterField(station.id, meter, { is_active: event.target.checked })}
+                                />
+                                {meter.is_active ? "Yes" : "No"}
+                              </label>
+                            </td>
+                            <td>
+                              <Button
+                                disabled={!meter.is_active || meterSubmitting === station.id}
+                                onClick={() => archiveMeter(station.id, meter.id)}
+                                size="sm"
+                                type="button"
+                                variant="outline"
+                              >
+                                Archive
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                        {station.meters.length === 0 ? (
+                          <tr className="border-t">
+                            <td className="py-2 text-slate-500" colSpan={5}>
+                              No station meters configured.
+                            </td>
+                          </tr>
+                        ) : null}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="mt-3 grid gap-2 sm:grid-cols-5">
+                    <select
+                      className="h-10 rounded-md border border-input bg-background px-2 text-sm"
+                      value={draft.product_type}
+                      onChange={(event) => patchDraft(station.id, { product_type: event.target.value as StationMeterRow["product_type"] })}
+                    >
+                      {PRODUCT_OPTIONS.map((value) => (
+                        <option key={value} value={value}>
+                          {value}
+                        </option>
+                      ))}
+                    </select>
+                    <Input
+                      placeholder="Meter label (e.g., D1)"
+                      value={draft.meter_label}
+                      onChange={(event) => patchDraft(station.id, { meter_label: event.target.value })}
+                    />
+                    <Input
+                      type="number"
+                      min={0}
+                      placeholder="Display order"
+                      value={draft.display_order}
+                      onChange={(event) => patchDraft(station.id, { display_order: event.target.value })}
+                    />
+                    <label className="inline-flex items-center gap-2 rounded-md border px-3 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={draft.is_active}
+                        onChange={(event) => patchDraft(station.id, { is_active: event.target.checked })}
+                      />
+                      Active
+                    </label>
+                    <Button disabled={meterSubmitting === station.id} onClick={() => submitNewMeter(station.id)} type="button">
+                      {meterSubmitting === station.id ? "Saving..." : "Add meter"}
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
