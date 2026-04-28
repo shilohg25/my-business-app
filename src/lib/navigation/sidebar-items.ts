@@ -7,6 +7,7 @@ import {
   History,
   Package,
   Settings,
+  UserCheck,
   Warehouse,
   type LucideIcon
 } from "lucide-react";
@@ -27,5 +28,6 @@ export const sidebarItems: SidebarItem[] = [
   { href: "/inventory/fuel/", label: "Fuel Inventory", icon: Fuel },
   { href: "/reports/", label: "Management Reports", icon: Database },
   { href: "/audit-logs/", label: "Audit Logs", icon: History },
+  { href: "/station-assignments/", label: "Station Assignments", icon: UserCheck },
   { href: "/settings/", label: "Settings", icon: Settings }
 ];

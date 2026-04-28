@@ -5,6 +5,7 @@ import { hasPermission } from "@/lib/auth/permissions";
 const USER_ALLOWED_EXACT_PATHS = ["/", "/shift-reports/"];
 const USER_ALLOWED_PREFIXES = ["/shift-reports/view/"];
 const OWNER_ONLY_EXACT_PATHS = ["/audit-logs/", "/settings/"];
+const MANAGER_ONLY_EXACT_PATHS = ["/station-assignments/"];
 
 function normalizePathname(pathname: string) {
   if (!pathname) return "/";
@@ -25,6 +26,10 @@ export function canAccessRoute(role: AppRole | null, pathname: string): boolean 
 
   if (OWNER_ONLY_EXACT_PATHS.includes(normalizedPath)) {
     return role === "Owner";
+  }
+
+  if (MANAGER_ONLY_EXACT_PATHS.includes(normalizedPath)) {
+    return role === "Owner" || role === "Admin";
   }
 
   return true;
@@ -51,7 +56,11 @@ export function getVisibleNavItemsForRole(role: AppRole | null, navItems: Sideba
   }
 
   if (role !== "Owner") {
-    return navItems.filter((item) => !OWNER_ONLY_EXACT_PATHS.includes(item.href));
+    return navItems.filter((item) => {
+      if (OWNER_ONLY_EXACT_PATHS.includes(item.href)) return false;
+      if (MANAGER_ONLY_EXACT_PATHS.includes(item.href)) return role === "Admin";
+      return true;
+    });
   }
 
   return navItems;
