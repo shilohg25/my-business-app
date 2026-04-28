@@ -254,6 +254,38 @@ begin
   set status = 'finalized', finalized_by = actor_id, finalized_at = now(), updated_at = now()
   where id = p_baseline_id;
 
+  insert into public.fuel_pump_meter_reading_events(
+    station_id,
+    pump_id,
+    product_id,
+    product_code_snapshot,
+    reading_date,
+    reading_at,
+    source,
+    opening_meter_reading,
+    closing_meter_reading,
+    entered_by,
+    notes
+  )
+  select mb.station_id, mb.pump_id, mb.product_id, mb.product_code_snapshot,
+    (row_baseline.baseline_at at time zone 'UTC')::date,
+    row_baseline.baseline_at,
+    'baseline',
+    mb.opening_meter_reading,
+    mb.opening_meter_reading,
+    actor_id,
+    'Opening baseline'
+  from public.fuel_station_meter_baselines mb
+  where mb.baseline_id = p_baseline_id
+    and mb.pump_id is not null
+    and not exists (
+      select 1 from public.fuel_pump_meter_reading_events e
+      where e.station_id = mb.station_id
+        and e.pump_id = mb.pump_id
+        and e.source = 'baseline'
+        and e.reading_at = row_baseline.baseline_at
+    );
+
   for row_product in
     select * from public.fuel_station_fuel_baseline_products where baseline_id = p_baseline_id
   loop
