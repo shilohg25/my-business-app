@@ -38,13 +38,35 @@ export interface ShiftReportDetail extends Record<string, unknown> {
   };
   meterReadings: Array<{
     id: string;
+    pump_id: string | null;
     pump_label_snapshot: string;
     product_code_snapshot: string;
     before_reading: number;
     after_reading: number;
     liters_sold: number;
     calibration_liters: number;
+    source: string;
     created_at: string;
+  }>;
+  meterPhotoEvidence: Array<{
+    id: string;
+    shift_report_id: string;
+    station_id: string;
+    pump_id: string | null;
+    product_code_snapshot: string;
+    phase: "opening" | "closing";
+    storage_bucket: string;
+    storage_path: string;
+    original_file_name: string | null;
+    mime_type: string | null;
+    file_size_bytes: number | null;
+    captured_at: string | null;
+    uploaded_by: string;
+    ocr_status: string;
+    ocr_reading: number | null;
+    user_confirmed_reading: number | null;
+    created_at: string;
+    signed_url?: string | null;
   }>;
   creditReceipts: Array<{
     id: string;
@@ -188,7 +210,7 @@ export async function fetchShiftReportDetail(reportId: string): Promise<ShiftRep
 
   const supabase = createSupabaseBrowserClient();
 
-  const [reportResult, meterResult, creditResult, expenseResult, cashResult, lubricantResult, auditResult] = await Promise.all([
+  const [reportResult, meterResult, evidenceResult, creditResult, expenseResult, cashResult, lubricantResult, auditResult] = await Promise.all([
     supabase
       .from("fuel_shift_reports")
       .select("id, report_date, duty_name, shift_time_label, source, status, discrepancy_amount, calculated_totals, created_at, updated_at, fuel_stations(name)")
@@ -196,7 +218,12 @@ export async function fetchShiftReportDetail(reportId: string): Promise<ShiftRep
       .single(),
     supabase
       .from("fuel_meter_readings")
-      .select("id, pump_label_snapshot, product_code_snapshot, before_reading, after_reading, liters_sold, calibration_liters, created_at")
+      .select("id, pump_id, pump_label_snapshot, product_code_snapshot, before_reading, after_reading, liters_sold, calibration_liters, source, created_at")
+      .eq("shift_report_id", reportId)
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("fuel_meter_photo_evidence")
+      .select("id, shift_report_id, station_id, pump_id, product_code_snapshot, phase, storage_bucket, storage_path, original_file_name, mime_type, file_size_bytes, captured_at, uploaded_by, ocr_status, ocr_reading, user_confirmed_reading, created_at")
       .eq("shift_report_id", reportId)
       .order("created_at", { ascending: true }),
     supabase
@@ -227,7 +254,7 @@ export async function fetchShiftReportDetail(reportId: string): Promise<ShiftRep
       .order("created_at", { ascending: false })
   ]);
 
-  const results = [reportResult, meterResult, creditResult, expenseResult, cashResult, lubricantResult, auditResult];
+  const results = [reportResult, meterResult, evidenceResult, creditResult, expenseResult, cashResult, lubricantResult, auditResult];
   const failedResult = results.find((result) => result.error);
 
   if (failedResult?.error) {
@@ -240,6 +267,13 @@ export async function fetchShiftReportDetail(reportId: string): Promise<ShiftRep
 
   const stationRelation = reportResult.data.fuel_stations as { name: string } | { name: string }[] | null | undefined;
   const normalizedStation = Array.isArray(stationRelation) ? stationRelation[0] ?? null : stationRelation ?? null;
+  const evidenceRows = (evidenceResult.data ?? []) as ShiftReportDetail["meterPhotoEvidence"];
+  const signedEvidence = await Promise.all(
+    evidenceRows.map(async (row) => {
+      const signed = await supabase.storage.from(row.storage_bucket).createSignedUrl(row.storage_path, 60 * 60);
+      return { ...row, signed_url: signed.data?.signedUrl ?? null };
+    })
+  );
 
   return {
     report: {
@@ -247,6 +281,7 @@ export async function fetchShiftReportDetail(reportId: string): Promise<ShiftRep
       fuel_stations: normalizedStation
     },
     meterReadings: (meterResult.data ?? []) as ShiftReportDetail["meterReadings"],
+    meterPhotoEvidence: signedEvidence,
     creditReceipts: (creditResult.data ?? []) as ShiftReportDetail["creditReceipts"],
     expenses: (expenseResult.data ?? []) as ShiftReportDetail["expenses"],
     cashCounts: (cashResult.data ?? []) as ShiftReportDetail["cashCounts"],

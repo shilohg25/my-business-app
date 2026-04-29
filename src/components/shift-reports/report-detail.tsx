@@ -132,6 +132,12 @@ function DataTable({ headers, children }: { headers: ReactNode; children: ReactN
   );
 }
 
+
+function getMeterEvidence(detail: ShiftReportDetail, pumpId: string | null, productCode: string, phase: "opening" | "closing") {
+  const normalizedCode = (productCode || "").trim().toUpperCase();
+  return detail.meterPhotoEvidence.find((row) => row.phase === phase && (row.pump_id ?? null) === (pumpId ?? null) && row.product_code_snapshot.trim().toUpperCase() === normalizedCode);
+}
+
 function StatusPill({ status }: { status: string }) {
   return (
     <span className="rounded-full border border-slate-300 bg-slate-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-700">
@@ -447,23 +453,40 @@ export function ReportDetail() {
                 <tr>
                   <th className="py-1.5">Pump</th>
                   <th className="py-1.5">Product</th>
-                  <th className="py-1.5 text-right">Before</th>
-                  <th className="py-1.5 text-right">After</th>
+                  <th className="py-1.5">Opening source</th>
+                  <th className="py-1.5 text-right">Opening</th>
+                  <th className="py-1.5 text-right">Closing</th>
+                  <th className="py-1.5">Closing photo</th>
+                  <th className="py-1.5">OCR status</th>
                   <th className="py-1.5 text-right">Gross liters</th>
                   <th className="py-1.5 text-right">Calibration</th>
                 </tr>
               }
             >
-              {detail.meterReadings.map((row) => (
-                <tr className="border-t border-slate-100" key={row.id}>
-                  <td className="py-1.5">{row.pump_label_snapshot}</td>
-                  <td className="py-1.5">{row.product_code_snapshot}</td>
-                  <td className="py-1.5 text-right tabular-nums">{formatMeterReading(row.before_reading)}</td>
-                  <td className="py-1.5 text-right tabular-nums">{formatMeterReading(row.after_reading)}</td>
-                  <td className="py-1.5 text-right tabular-nums">{formatLiters(row.liters_sold)}</td>
-                  <td className="py-1.5 text-right tabular-nums">{formatLiters(row.calibration_liters)}</td>
-                </tr>
-              ))}
+              {detail.meterReadings.map((row) => {
+                const closingEvidence = getMeterEvidence(detail, row.pump_id, row.product_code_snapshot, "closing");
+                return (
+                  <tr className="border-t border-slate-100" key={row.id}>
+                    <td className="py-1.5">{row.pump_label_snapshot}</td>
+                    <td className="py-1.5">{row.product_code_snapshot}</td>
+                    <td className="py-1.5">{row.source || "-"}</td>
+                    <td className="py-1.5 text-right tabular-nums">{formatMeterReading(row.before_reading)}</td>
+                    <td className="py-1.5 text-right tabular-nums">{formatMeterReading(row.after_reading)}</td>
+                    <td className="py-1.5">
+                      {closingEvidence?.signed_url ? (
+                        <a className="text-blue-700 underline" href={closingEvidence.signed_url} rel="noreferrer" target="_blank">
+                          View photo
+                        </a>
+                      ) : (
+                        <span className="text-amber-700">Missing photo evidence</span>
+                      )}
+                    </td>
+                    <td className="py-1.5">{closingEvidence?.ocr_status ?? "missing"}</td>
+                    <td className="py-1.5 text-right tabular-nums">{formatLiters(row.liters_sold)}</td>
+                    <td className="py-1.5 text-right tabular-nums">{formatLiters(row.calibration_liters)}</td>
+                  </tr>
+                );
+              })}
             </DataTable>
           </SectionCard>
 
