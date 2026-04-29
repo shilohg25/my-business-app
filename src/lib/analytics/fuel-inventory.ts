@@ -76,11 +76,15 @@ export function buildStationFuelInventorySummary(input: BuildStationFuelInventor
   const targetProducts: FuelProductCode[] = ["DIESEL", "SPECIAL", "UNLEADED"];
   const stationById = new Map(input.stations.map((row) => [row.id, row.name]));
 
-  const latestBaselineByStation = new Map<string, { id: string; status: string; baseline_at: string }>();
+  // Baseline state machine: missing -> draft -> finalized -> voided -> new draft -> finalized.
+  // Only finalized baselines affect live inventory calculations.
+  const latestFinalizedBaselineByStation = new Map<string, { id: string; status: string; baseline_at: string }>();
   input.baselines.forEach((row) => {
-    const existing = latestBaselineByStation.get(row.station_id);
-    if (!existing || (row.baseline_at ?? "") > (existing.baseline_at ?? "")) {
-      latestBaselineByStation.set(row.station_id, row);
+    if (row.status === "finalized") {
+      const existingFinalized = latestFinalizedBaselineByStation.get(row.station_id);
+      if (!existingFinalized || (row.baseline_at ?? "") > (existingFinalized.baseline_at ?? "")) {
+        latestFinalizedBaselineByStation.set(row.station_id, row);
+      }
     }
   });
 
@@ -88,7 +92,7 @@ export function buildStationFuelInventorySummary(input: BuildStationFuelInventor
   input.baselineProducts.forEach((row) => {
     const product = normalizeFuelProductCode(row.product_code_snapshot);
     if (product === "OTHER") return;
-    const baseline = latestBaselineByStation.get(row.station_id);
+    const baseline = latestFinalizedBaselineByStation.get(row.station_id);
     if (!baseline || baseline.id !== row.baseline_id) return;
     openingByStationProduct.set(`${row.station_id}::${product}`, asNumber(row.opening_liters));
   });
@@ -129,7 +133,7 @@ export function buildStationFuelInventorySummary(input: BuildStationFuelInventor
       const delivered = deliveriesByStationProduct.get(key) ?? 0;
       const meterOut = meterByStationProduct.get(key) ?? 0;
       const expected = computeFuelExpectedEnding(opening, delivered, meterOut);
-      const latestActual = actualByStationProduct.get(key)?.actual ?? opening;
+      const latestActual = baselineStatus === "finalized" ? (actualByStationProduct.get(key)?.actual ?? opening) : 0;
       const variance = computeFuelVariance(latestActual, expected);
       rows.push({
         station_id: station.id,

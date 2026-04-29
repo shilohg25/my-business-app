@@ -36,6 +36,8 @@ function toNum(value: string) {
 
 function fuelVarianceLabel(value: number, baselineStatus: string) {
   if (baselineStatus === "missing") return "Missing baseline";
+  if (baselineStatus === "draft") return "Draft baseline";
+  if (baselineStatus === "voided") return "Voided baseline";
   if (Math.abs(value) <= 0.001) return "Balanced";
   if (value > 0) return "Fuel over";
   return "Fuel shortage";
@@ -45,11 +47,15 @@ function statusBadgeClass(status: string) {
   if (status === "Fuel shortage") return "border-amber-200 bg-amber-50 text-amber-800";
   if (status === "Fuel over") return "border-blue-200 bg-blue-50 text-blue-800";
   if (status === "Missing baseline") return "border-slate-300 bg-slate-100 text-slate-700";
+  if (status === "Draft baseline") return "border-amber-200 bg-amber-50 text-amber-800";
+  if (status === "Voided baseline") return "border-rose-200 bg-rose-50 text-rose-800";
   return "border-emerald-200 bg-emerald-50 text-emerald-700";
 }
 
-function stationAggregateStatus(variance: number, hasMissingBaseline: boolean) {
-  if (hasMissingBaseline) return "Missing baseline";
+function stationAggregateStatus(variance: number, baselineStatus: string) {
+  if (baselineStatus === "missing") return "Missing baseline";
+  if (baselineStatus === "draft") return "Draft baseline";
+  if (baselineStatus === "voided") return "Voided baseline";
   if (Math.abs(variance) <= 0.001) return "Balanced";
   return variance > 0 ? "Fuel over" : "Fuel shortage";
 }
@@ -270,7 +276,7 @@ export function FuelInventoryClient() {
       const selectedStationId = baselineStationId || stationId;
       if (!selectedStationId) throw new Error("Select a station before creating baseline");
       const stationRow = baselinePanelRows.find((row) => row.station.id === selectedStationId) ?? null;
-      if (stationRow?.status === "finalized" || stationRow?.status === "voided") {
+      if (stationRow?.status === "finalized") {
         throw new Error("This station already has a finalized baseline. Void it first if you need to recreate it.");
       }
       if (finalize && meterRows.length === 0) {
@@ -319,7 +325,22 @@ export function FuelInventoryClient() {
 
   function handleOpenWizard(stationId: string, mode: "create" | "continue" | "view") {
     setBaselineStationId(stationId);
-    setWizardVisible(mode !== "view");
+    if (mode === "view") {
+      setWizardVisible(false);
+      return;
+    }
+    if (mode === "create") {
+      const now = new Date();
+      const timezoneOffset = now.getTimezoneOffset() * 60000;
+      const localNow = new Date(now.getTime() - timezoneOffset).toISOString().slice(0, 16);
+      setBaselineDateTime(localNow);
+      setBaselineNotes("");
+      setDieselOpening("0");
+      setSpecialOpening("0");
+      setUnleadedOpening("0");
+      setMeterRows((prev) => prev.map((row) => ({ ...row, opening_meter_reading: "0", notes: "", nozzle_label: "" })));
+    }
+    setWizardVisible(true);
   }
 
   async function handleInitializePumpReading(stationId: string, pumpId: string, openingReading: number) {
@@ -476,7 +497,12 @@ export function FuelInventoryClient() {
                     <td className="pr-4 text-right tabular-nums">{formatLiters(row.unleaded)}</td>
                     <td>
                       <Button
-                        onClick={() => handleOpenWizard(row.station.id, row.status === "missing" ? "create" : row.status === "draft" ? "continue" : "view")}
+                        onClick={() =>
+                          handleOpenWizard(
+                            row.station.id,
+                            row.status === "missing" ? "create" : row.status === "draft" ? "continue" : row.status === "voided" ? "create" : "view"
+                          )
+                        }
                         size="sm"
                         variant="outline"
                       >
@@ -488,7 +514,7 @@ export function FuelInventoryClient() {
                               ? "Create new baseline"
                               : "View baseline"}
                       </Button>
-                      {row.baseline ? (
+                      {row.baseline && (row.status === "finalized" || row.status === "draft") ? (
                         <Button className="ml-2" onClick={() => handleVoidBaseline(row.baseline!.id)} size="sm" variant="outline">
                           Void
                         </Button>
@@ -666,12 +692,12 @@ export function FuelInventoryClient() {
           {groupedSummaryRows.map((group) => {
             const rowByProduct = new Map(group.rows.map((row) => [row.product, row]));
             const rowsForDisplay = fuelProducts.map((product) => rowByProduct.get(product)).filter(Boolean);
-            const hasMissingBaseline = rowsForDisplay.some((row) => row?.baseline_status === "missing");
+            const baselineStatus = rowsForDisplay[0]?.baseline_status ?? "missing";
             const totalExpected = rowsForDisplay.reduce((sum, row) => sum + (row?.expected_ending_liters ?? 0), 0);
             const withActuals = rowsForDisplay.filter((row) => typeof row?.latest_actual_ending_liters === "number");
             const totalActual = withActuals.reduce((sum, row) => sum + (row?.latest_actual_ending_liters ?? 0), 0);
             const totalVariance = rowsForDisplay.reduce((sum, row) => sum + (row?.variance_liters ?? 0), 0);
-            const aggregate = stationAggregateStatus(totalVariance, hasMissingBaseline);
+            const aggregate = stationAggregateStatus(totalVariance, baselineStatus);
 
             return (
               <section className="rounded-lg border" key={group.stationId}>
@@ -681,13 +707,15 @@ export function FuelInventoryClient() {
                     <Badge className={statusBadgeClass(aggregate)}>{aggregate}</Badge>
                   </div>
                   <div className="grid gap-2 text-xs text-slate-600 sm:grid-cols-2 lg:grid-cols-4">
-                    <div>Baseline: {hasMissingBaseline ? "Missing" : "Ready"}</div>
+                    <div>Baseline: {baselineStatus === "finalized" ? "Ready" : baselineStatus === "missing" ? "Missing" : baselineStatus === "draft" ? "Draft" : "Voided"}</div>
                     <div className="tabular-nums">Expected ending: {formatLiters(totalExpected)} L</div>
                     <div className="tabular-nums">Latest actual: {withActuals.length ? `${formatLiters(totalActual)} L` : "-"}</div>
                     <div className="tabular-nums">Variance: {formatVariance(totalVariance)} L</div>
                   </div>
                 </div>
-                {hasMissingBaseline ? <p className="border-b px-4 py-2 text-xs text-amber-700">Opening baseline has not been created yet.</p> : null}
+                {baselineStatus === "missing" ? <p className="border-b px-4 py-2 text-xs text-amber-700">Opening baseline has not been created yet.</p> : null}
+                {baselineStatus === "draft" ? <p className="border-b px-4 py-2 text-xs text-amber-700">Station has a draft baseline that is not yet live.</p> : null}
+                {baselineStatus === "voided" ? <p className="border-b px-4 py-2 text-xs text-rose-700">Station baseline was voided and is excluded from live inventory.</p> : null}
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead className="text-left text-slate-500">
