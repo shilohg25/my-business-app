@@ -75,21 +75,23 @@ export function UsersAndRolesClient() {
                       <td>{user.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleString() : "Never"}</td>
                       <td className="flex flex-wrap gap-2">
                         <Button size="sm" onClick={async () => {
+                          setError(null);
                           try {
                             await updateUserRole(user.id, (user.role ?? "User") as AppRole, user.is_active, user.must_change_password);
                             setMessage(`Saved ${user.email}`);
                             await reload();
                           } catch (err) {
-                            setError(err instanceof Error ? err.message : "Unable to save user");
+                            setError(err instanceof Error ? err.message : String(err));
                           }
                         }}>Save</Button>
                         <Button size="sm" variant="outline" onClick={async () => {
+                          setError(null);
                           try {
                             await deactivateUser(user.id, "Owner deactivated profile");
                             setMessage(`Deactivated ${user.email}`);
                             await reload();
                           } catch (err) {
-                            setError(err instanceof Error ? err.message : "Unable to deactivate user");
+                            setError(err instanceof Error ? err.message : String(err));
                           }
                         }}>Deactivate</Button>
                       </td>
@@ -111,13 +113,14 @@ export function UsersAndRolesClient() {
                 <label className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" checked={mustChange} onChange={(e) => setMustChange(e.target.checked)} /> Must change password</label>
               </div>
               <Button onClick={async () => {
+                setError(null);
                 try {
                   await activateProfileByEmail(email, role, isActive, mustChange);
                   setMessage("Activated user profile");
                   setEmail("");
                   await reload();
                 } catch (err) {
-                  setError(err instanceof Error ? err.message : "Unable to activate profile");
+                  setError(err instanceof Error ? err.message : String(err));
                 }
               }}>Activate user profile</Button>
             </div>

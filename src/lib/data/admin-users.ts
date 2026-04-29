@@ -19,7 +19,7 @@ export async function listUsersForOwner() {
   if (!canUseLiveData()) return [] as OwnerUserRow[];
   const supabase = createSupabaseBrowserClient();
   const { data, error } = await supabase.rpc("fuel_owner_list_users");
-  if (error) throw error;
+  if (error) throw new Error(error.message);
   return (data ?? []) as OwnerUserRow[];
 }
 
@@ -31,7 +31,7 @@ export async function activateProfileByEmail(email: string, role: AppRole, isAct
     user_is_active: isActive,
     user_must_change_password: mustChangePassword
   });
-  if (error) throw error;
+  if (error) throw new Error(error.message);
   return data as string;
 }
 
@@ -43,7 +43,7 @@ export async function updateUserRole(userId: string, role: AppRole, isActive: bo
     user_is_active: isActive,
     user_must_change_password: mustChangePassword
   });
-  if (error) throw error;
+  if (error) throw new Error(error.message);
   return data as string;
 }
 
@@ -53,6 +53,6 @@ export async function deactivateUser(userId: string, reason: string) {
     target_user_id: userId,
     reason
   });
-  if (error) throw error;
+  if (error) throw new Error(error.message);
   return data as string;
 }
