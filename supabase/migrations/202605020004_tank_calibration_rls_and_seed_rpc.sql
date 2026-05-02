@@ -84,14 +84,14 @@ begin
     raise exception 'Only Owner profiles can prepare tank calibration profiles.';
   end if;
 
-  insert into public.tank_calibration_profiles (
+  insert into public.tank_calibration_profiles as tcp (
     profile_key, name, formula_type, diameter_cm, radius_cm, length_cm, max_dipstick_cm, nominal_label, calculated_full_liters, rounded_full_liters, is_verified, is_owner_only
   )
   values
     ('ugt_16kl_202x488','16KL nominal / 4000 USG horizontal UGT — 202 cm diameter × 488 cm length','horizontal_cylinder',202,101,488,202,'16KL / 4000 USG',15639.1246897235,15639,true,true),
     ('ugt_12kl_split_half_203x183','12KL split tank half-compartment — 203 cm diameter × 183 cm length','horizontal_cylinder',203,101.5,183,203,'6KL compartment inside 12KL split tank',5922.8815435265,5923,true,true),
     ('ugt_12kl_single_203x366','12KL single horizontal UGT — 203 cm diameter × 366 cm length','horizontal_cylinder',203,101.5,366,203,'12KL single tank',11845.7630870530,11846,true,true)
-  on conflict (profile_key) do update
+  on conflict on constraint tank_calibration_profiles_profile_key_key do update
   set
     name = excluded.name,
     formula_type = excluded.formula_type,
@@ -105,7 +105,7 @@ begin
     is_verified = excluded.is_verified,
     is_owner_only = excluded.is_owner_only,
     updated_at = now()
-  where public.tank_calibration_profiles.is_verified = true;
+  where tcp.is_verified = true;
 
   return query
   select tcp.id, tcp.profile_key, tcp.name, tcp.formula_type, tcp.diameter_cm, tcp.radius_cm, tcp.length_cm, tcp.max_dipstick_cm, tcp.nominal_label, tcp.calculated_full_liters, tcp.rounded_full_liters, tcp.is_verified, tcp.is_owner_only
