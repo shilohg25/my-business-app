@@ -17,6 +17,22 @@ export type StationTankRecord = {
   calculated_full_liters: number;
 };
 
+export type TankCalibrationProfileOption = {
+  id: string;
+  profileKey: string;
+  name: string;
+  formulaType: "horizontal_cylinder" | "manual_table";
+  diameterCm: number | null;
+  radiusCm: number | null;
+  lengthCm: number | null;
+  maxDipstickCm: number;
+  nominalLabel: string;
+  calculatedFullLiters: number;
+  roundedFullLiters: number;
+  isVerified: boolean;
+  isOwnerOnly: boolean;
+};
+
 function mapVerifiedProfile(profile: TankCalibrationProfile) {
   return {
     profile_key: profile.profileKey,
@@ -34,8 +50,58 @@ function mapVerifiedProfile(profile: TankCalibrationProfile) {
   };
 }
 
-export function listTankCalibrationProfiles() {
-  return VERIFIED_TANK_PROFILES;
+export function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function mapDbProfile(profile: any): TankCalibrationProfileOption {
+  return {
+    id: profile.id,
+    profileKey: profile.profile_key,
+    name: profile.name,
+    formulaType: profile.formula_type,
+    diameterCm: profile.diameter_cm == null ? null : Number(profile.diameter_cm),
+    radiusCm: profile.radius_cm == null ? null : Number(profile.radius_cm),
+    lengthCm: profile.length_cm == null ? null : Number(profile.length_cm),
+    maxDipstickCm: Number(profile.max_dipstick_cm),
+    nominalLabel: profile.nominal_label,
+    calculatedFullLiters: Number(profile.calculated_full_liters),
+    roundedFullLiters: Number(profile.rounded_full_liters),
+    isVerified: Boolean(profile.is_verified),
+    isOwnerOnly: Boolean(profile.is_owner_only)
+  };
+}
+
+export async function listTankCalibrationProfiles(): Promise<TankCalibrationProfileOption[]> {
+  if (!canUseLiveData()) return VERIFIED_TANK_PROFILES;
+  const supabase = createSupabaseBrowserClient();
+  const { data, error } = await supabase
+    .from("tank_calibration_profiles")
+    .select("id, profile_key, name, formula_type, diameter_cm, radius_cm, length_cm, max_dipstick_cm, nominal_label, calculated_full_liters, rounded_full_liters, is_verified, is_owner_only")
+    .is("archived_at", null)
+    .order("name", { ascending: true });
+  if (error) throw error;
+  if (!data?.length) return [];
+  return data.map(mapDbProfile);
+}
+
+export async function resolveCalibrationProfileId(profileIdOrKey: string) {
+  if (isUuid(profileIdOrKey)) return profileIdOrKey;
+  if (!canUseLiveData()) {
+    const fallback = VERIFIED_TANK_PROFILES.find((profile) => profile.profileKey === profileIdOrKey);
+    if (!fallback) throw new Error(`Unknown calibration profile: ${profileIdOrKey}`);
+    return fallback.id;
+  }
+  const supabase = createSupabaseBrowserClient();
+  const { data, error } = await supabase
+    .from("tank_calibration_profiles")
+    .select("id")
+    .eq("profile_key", profileIdOrKey)
+    .is("archived_at", null)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data?.id) throw new Error(`Unknown calibration profile: ${profileIdOrKey}`);
+  return data.id as string;
 }
 
 export async function listStationsForTankSetup() {
@@ -89,7 +155,7 @@ export async function createOrUpdateStationTank(payload: {
     station_id: payload.station_id,
     product_type: payload.product_type,
     tank_name: payload.tank_name,
-    calibration_profile_id: payload.calibration_profile_id,
+    calibration_profile_id: await resolveCalibrationProfileId(payload.calibration_profile_id),
     reorder_threshold_liters: payload.reorder_threshold_liters ?? null,
     variance_tolerance_liters: payload.variance_tolerance_liters ?? null,
     active: true
