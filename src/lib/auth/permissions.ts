@@ -9,7 +9,11 @@ export type Permission =
   | "manageUsers"
   | "viewAudit"
   | "manageCriticalSettings"
-  | "restoreRecords";
+  | "restoreRecords"
+  | "tankCalibrationView"
+  | "tankCalibrationManage"
+  | "tankReconciliationView"
+  | "tankReconciliationManage";
 
 const rolePermissions: Record<AppRole, Permission[]> = {
   Owner: [
@@ -22,9 +26,13 @@ const rolePermissions: Record<AppRole, Permission[]> = {
     "manageUsers",
     "viewAudit",
     "manageCriticalSettings",
-    "restoreRecords"
+    "restoreRecords",
+    "tankCalibrationView",
+    "tankCalibrationManage",
+    "tankReconciliationView",
+    "tankReconciliationManage"
   ],
-  "Co-Owner": ["read", "create", "edit", "archive", "approve", "export"],
+  "Co-Owner": ["read", "create", "edit", "archive", "approve", "export", "tankCalibrationView", "tankReconciliationView"],
   Admin: ["read", "create", "edit", "archive", "export"],
   User: ["read"]
 };
