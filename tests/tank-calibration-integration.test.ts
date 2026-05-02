@@ -1,7 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { buildTankCalibrationDisplay } from "@/lib/domain/tankCalibrationDisplay";
 import { VERIFIED_TANK_PROFILES } from "@/lib/domain/tankCalibration";
-import { createOrUpdateStationTank, getSeedCalibrationProfiles, isUuid, resolveCalibrationProfileId } from "@/lib/data/tank-calibration";
+import {
+  createOrUpdateStationTank,
+  ensureVerifiedTankCalibrationProfilesSeeded,
+  getSeedCalibrationProfiles,
+  isUuid,
+  listTankCalibrationProfiles,
+  resolveCalibrationProfileId
+} from "@/lib/data/tank-calibration";
 import { hasPermission } from "@/lib/auth/permissions";
 
 const fromMock = vi.fn();
@@ -84,5 +91,55 @@ describe("tank calibration integration helpers", () => {
     });
 
     expect(insertMock).toHaveBeenCalledWith(expect.objectContaining({ calibration_profile_id: resolvedId }));
+  });
+
+  it("auto-seeds when no calibration rows are found and returns database UUID ids", async () => {
+    const dbRows = [
+      { id: "11111111-1111-4111-8111-111111111111", profile_key: "ugt_16kl_202x488", name: "A", formula_type: "horizontal_cylinder", diameter_cm: 202, radius_cm: 101, length_cm: 488, max_dipstick_cm: 202, nominal_label: "n", calculated_full_liters: 1, rounded_full_liters: 1, is_verified: true, is_owner_only: true },
+      { id: "22222222-2222-4222-8222-222222222222", profile_key: "ugt_12kl_split_half_203x183", name: "B", formula_type: "horizontal_cylinder", diameter_cm: 203, radius_cm: 101.5, length_cm: 183, max_dipstick_cm: 203, nominal_label: "n", calculated_full_liters: 1, rounded_full_liters: 1, is_verified: true, is_owner_only: true },
+      { id: "33333333-3333-4333-8333-333333333333", profile_key: "ugt_12kl_single_203x366", name: "C", formula_type: "horizontal_cylinder", diameter_cm: 203, radius_cm: 101.5, length_cm: 366, max_dipstick_cm: 203, nominal_label: "n", calculated_full_liters: 1, rounded_full_liters: 1, is_verified: true, is_owner_only: true }
+    ];
+    const upsert = vi.fn().mockResolvedValue({ error: null });
+    let fetchCall = 0;
+    fromMock.mockImplementation((table: string) => {
+      if (table !== "tank_calibration_profiles") throw new Error(`Unexpected table ${table}`);
+      return {
+        select: () => ({
+          is: () => ({
+            order: async () => ({ data: fetchCall++ === 0 ? [] : dbRows, error: null }),
+            then: undefined
+          })
+        }),
+        upsert
+      } as any;
+    });
+    const rows = await listTankCalibrationProfiles();
+    expect(upsert).toHaveBeenCalled();
+    expect(rows[0].id).toMatch(/[0-9a-f-]{36}/i);
+  });
+
+  it("seeds when verified set is partially missing and uses profile_key conflict handling", async () => {
+    const upsert = vi.fn().mockResolvedValue({ error: null });
+    let callCount = 0;
+    fromMock.mockImplementation((table: string) => {
+      if (table !== "tank_calibration_profiles") throw new Error(`Unexpected table ${table}`);
+      return {
+        select: () => ({
+          is: () => ({
+            order: async () => ({
+              data:
+                callCount++ === 0
+                  ? [{ id: "11111111-1111-4111-8111-111111111111", profile_key: "ugt_16kl_202x488", name: "A", formula_type: "horizontal_cylinder", diameter_cm: 202, radius_cm: 101, length_cm: 488, max_dipstick_cm: 202, nominal_label: "n", calculated_full_liters: 1, rounded_full_liters: 1, is_verified: true, is_owner_only: true }]
+                  : [{ id: "11111111-1111-4111-8111-111111111111", profile_key: "ugt_16kl_202x488", name: "A", formula_type: "horizontal_cylinder", diameter_cm: 202, radius_cm: 101, length_cm: 488, max_dipstick_cm: 202, nominal_label: "n", calculated_full_liters: 1, rounded_full_liters: 1, is_verified: true, is_owner_only: true }],
+              error: null
+            }),
+            then: (resolve: any) => resolve({ data: [{ profile_key: "ugt_16kl_202x488" }], error: null })
+          })
+        }),
+        upsert
+      };
+    });
+    await ensureVerifiedTankCalibrationProfilesSeeded();
+    expect(upsert).toHaveBeenCalledWith(expect.any(Array), { onConflict: "profile_key" });
   });
 });

@@ -141,6 +141,7 @@ export function FuelInventoryClient() {
   const [setupStations, setSetupStations] = useState<Array<{ id: string; name: string }>>([]);
   const [profiles, setProfiles] = useState<Awaited<ReturnType<typeof listTankCalibrationProfiles>>>([]);
   const [profileLoadMessage, setProfileLoadMessage] = useState<string | null>(null);
+  const [preparingProfiles, setPreparingProfiles] = useState(false);
   const [selectedTankId, setSelectedTankId] = useState("");
   const [cmsReading, setCmsReading] = useState("");
   const [tankSetupForm, setTankSetupForm] = useState({ station_id: "", product_type: "DIESEL", tank_name: "", calibration_profile_id: "", reorder_threshold_liters: "", variance_tolerance_liters: "" });
@@ -228,13 +229,24 @@ export function FuelInventoryClient() {
       return profile?.role ?? null;
     };
 
+    setPreparingProfiles(true);
     Promise.all([reload(), loadRole(), fetchAllowedDeliveryStations(), listStationTanks(), listStationsForTankSetup(), listTankCalibrationProfiles()])
       .then(([, nextRole, stations, tanks, setupStationRows, calibrationProfiles]) => {
         setRole(nextRole); setAllowedDeliveryStations(stations); setStationTanks(tanks); setSetupStations(setupStationRows); setProfiles(calibrationProfiles);
-        setProfileLoadMessage(calibrationProfiles.length ? null : "No calibration profiles seeded. Apply the calibration profile seed migration first.");
+        setProfileLoadMessage(null);
       })
-      .catch((nextError: Error) => setError(nextError.message))
+      .catch((nextError: any) => {
+        const messageText = String(nextError?.message ?? "");
+        const missingTable = nextError?.code === "42P01" || messageText.includes("tank_calibration_profiles");
+        setProfileLoadMessage(
+          missingTable
+            ? "Tank calibration tables are not installed. Apply the tank calibration schema migration."
+            : `Unable to prepare calibration profiles: ${messageText || "Unknown error"}`
+        );
+        setError(messageText || "Unknown error");
+      })
       .finally(() => {
+        setPreparingProfiles(false);
         setLoading(false);
         setRoleChecking(false);
       });
@@ -461,6 +473,11 @@ export function FuelInventoryClient() {
     setMessage("Tank assignment saved.");
     setTankSetupOpen(false);
   }
+  const canSaveTankSetup =
+    Boolean(tankSetupForm.station_id) &&
+    Boolean(tankSetupForm.product_type) &&
+    Boolean(tankSetupForm.tank_name.trim()) &&
+    Boolean(tankSetupForm.calibration_profile_id);
 
   return (
     <div className="space-y-6">
@@ -900,6 +917,7 @@ export function FuelInventoryClient() {
         )}
       </SimpleModal>
       <SimpleModal open={tankSetupOpen} onClose={() => setTankSetupOpen(false)} title="Tank Setup" description="Assign calibration profile per station/product tank.">
+        {preparingProfiles ? <p className="rounded border border-slate-200 bg-slate-50 p-2 text-sm text-slate-700">Preparing verified tank calibration profiles...</p> : null}
         {profileLoadMessage ? <p className="rounded border border-amber-200 bg-amber-50 p-2 text-sm text-amber-800">{profileLoadMessage}</p> : null}
         <form className="space-y-2" onSubmit={handleSaveTankSetup}>
           <select className="w-full rounded-md border px-3 py-2 text-sm" value={tankSetupForm.station_id} onChange={(e)=>setTankSetupForm((p)=>({...p,station_id:e.target.value}))}><option value="">Select station</option>{setupStations.map((station)=><option key={station.id} value={station.id}>{station.name}</option>)}</select>
@@ -908,7 +926,7 @@ export function FuelInventoryClient() {
           <select className="w-full rounded-md border px-3 py-2 text-sm" value={tankSetupForm.calibration_profile_id} onChange={(e)=>setTankSetupForm((p)=>({...p,calibration_profile_id:e.target.value}))}><option value="">Select profile</option>{profiles.map((profile)=><option key={profile.id} value={profile.id}>{profile.name} ({profile.profileKey})</option>)}</select>
           <Input type="number" placeholder="Reorder threshold liters" value={tankSetupForm.reorder_threshold_liters} onChange={(e)=>setTankSetupForm((p)=>({...p,reorder_threshold_liters:e.target.value}))}/>
           <Input type="number" placeholder="Variance tolerance liters" value={tankSetupForm.variance_tolerance_liters} onChange={(e)=>setTankSetupForm((p)=>({...p,variance_tolerance_liters:e.target.value}))}/>
-          <Button type="submit">Save assignment</Button>
+          <Button type="submit" disabled={!canSaveTankSetup}>Save assignment</Button>
         </form>
       </SimpleModal>
     </div>

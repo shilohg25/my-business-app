@@ -72,17 +72,50 @@ function mapDbProfile(profile: any): TankCalibrationProfileOption {
   };
 }
 
-export async function listTankCalibrationProfiles(): Promise<TankCalibrationProfileOption[]> {
-  if (!canUseLiveData()) return VERIFIED_TANK_PROFILES;
+const VERIFIED_BUILT_IN_PROFILE_KEYS = new Set([
+  "ugt_16kl_202x488",
+  "ugt_12kl_split_half_203x183",
+  "ugt_12kl_single_203x366"
+]);
+
+const TANK_PROFILE_SELECT =
+  "id, profile_key, name, formula_type, diameter_cm, radius_cm, length_cm, max_dipstick_cm, nominal_label, calculated_full_liters, rounded_full_liters, is_verified, is_owner_only";
+
+async function fetchDbTankCalibrationProfiles() {
   const supabase = createSupabaseBrowserClient();
   const { data, error } = await supabase
     .from("tank_calibration_profiles")
-    .select("id, profile_key, name, formula_type, diameter_cm, radius_cm, length_cm, max_dipstick_cm, nominal_label, calculated_full_liters, rounded_full_liters, is_verified, is_owner_only")
+    .select(TANK_PROFILE_SELECT)
     .is("archived_at", null)
     .order("name", { ascending: true });
   if (error) throw error;
-  if (!data?.length) return [];
-  return data.map(mapDbProfile);
+  return (data ?? []).map(mapDbProfile);
+}
+
+function hasAllVerifiedProfiles(profiles: TankCalibrationProfileOption[]) {
+  const keys = new Set(profiles.map((profile) => profile.profileKey));
+  return [...VERIFIED_BUILT_IN_PROFILE_KEYS].every((key) => keys.has(key));
+}
+
+export async function ensureVerifiedTankCalibrationProfilesSeeded(): Promise<TankCalibrationProfileOption[]> {
+  if (!canUseLiveData()) return [];
+  const supabase = createSupabaseBrowserClient();
+  const { data: existing, error: existingError } = await supabase.from("tank_calibration_profiles").select("profile_key").is("archived_at", null);
+  if (existingError) throw existingError;
+  const existingKeys = new Set((existing ?? []).map((row: { profile_key: string }) => row.profile_key));
+  const missingVerifiedKey = [...VERIFIED_BUILT_IN_PROFILE_KEYS].some((key) => !existingKeys.has(key));
+  if (missingVerifiedKey) {
+    const { error: upsertError } = await supabase.from("tank_calibration_profiles").upsert(getSeedCalibrationProfiles(), { onConflict: "profile_key" });
+    if (upsertError) throw upsertError;
+  }
+  return fetchDbTankCalibrationProfiles();
+}
+
+export async function listTankCalibrationProfiles(): Promise<TankCalibrationProfileOption[]> {
+  if (!canUseLiveData()) return VERIFIED_TANK_PROFILES;
+  const profiles = await fetchDbTankCalibrationProfiles();
+  if (!profiles.length || !hasAllVerifiedProfiles(profiles)) return ensureVerifiedTankCalibrationProfilesSeeded();
+  return profiles;
 }
 
 export async function resolveCalibrationProfileId(profileIdOrKey: string) {
