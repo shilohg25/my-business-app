@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
 import { buildTankCalibrationDisplay } from "@/lib/domain/tankCalibrationDisplay";
 import { VERIFIED_TANK_PROFILES } from "@/lib/domain/tankCalibration";
 import {
@@ -75,5 +76,19 @@ describe("tank calibration integration helpers", () => {
     expect(shouldPrepareOwnerCalibrationProfiles(false, "User")).toBe(false);
     expect(shouldPrepareOwnerCalibrationProfiles(true, "Owner")).toBe(false);
     expect(shouldPrepareOwnerCalibrationProfiles(false, "Owner")).toBe(true);
+  });
+
+  it("uses conflict constraint syntax in seed RPC migration to avoid RETURNS TABLE ambiguity", () => {
+    const migrationSql = readFileSync(
+      "supabase/migrations/202605020004_tank_calibration_rls_and_seed_rpc.sql",
+      "utf8"
+    );
+
+    expect(migrationSql).toContain("insert into public.tank_calibration_profiles as tcp");
+    expect(migrationSql).toContain(
+      "on conflict on constraint tank_calibration_profiles_profile_key_key do update"
+    );
+    expect(migrationSql).toContain("where tcp.is_verified = true;");
+    expect(migrationSql).not.toContain("on conflict (profile_key) do update");
   });
 });
