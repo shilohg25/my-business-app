@@ -139,6 +139,8 @@ export function FuelInventoryClient() {
   const [tankSetupOpen, setTankSetupOpen] = useState(false);
   const [stationTanks, setStationTanks] = useState<Awaited<ReturnType<typeof listStationTanks>>>([]);
   const [setupStations, setSetupStations] = useState<Array<{ id: string; name: string }>>([]);
+  const [profiles, setProfiles] = useState<Awaited<ReturnType<typeof listTankCalibrationProfiles>>>([]);
+  const [profileLoadMessage, setProfileLoadMessage] = useState<string | null>(null);
   const [selectedTankId, setSelectedTankId] = useState("");
   const [cmsReading, setCmsReading] = useState("");
   const [tankSetupForm, setTankSetupForm] = useState({ station_id: "", product_type: "DIESEL", tank_name: "", calibration_profile_id: "", reorder_threshold_liters: "", variance_tolerance_liters: "" });
@@ -226,8 +228,11 @@ export function FuelInventoryClient() {
       return profile?.role ?? null;
     };
 
-    Promise.all([reload(), loadRole(), fetchAllowedDeliveryStations(), listStationTanks(), listStationsForTankSetup()])
-      .then(([, nextRole, stations, tanks, setupStationRows]) => { setRole(nextRole); setAllowedDeliveryStations(stations); setStationTanks(tanks); setSetupStations(setupStationRows); })
+    Promise.all([reload(), loadRole(), fetchAllowedDeliveryStations(), listStationTanks(), listStationsForTankSetup(), listTankCalibrationProfiles()])
+      .then(([, nextRole, stations, tanks, setupStationRows, calibrationProfiles]) => {
+        setRole(nextRole); setAllowedDeliveryStations(stations); setStationTanks(tanks); setSetupStations(setupStationRows); setProfiles(calibrationProfiles);
+        setProfileLoadMessage(calibrationProfiles.length ? null : "No calibration profiles seeded. Apply the calibration profile seed migration first.");
+      })
       .catch((nextError: Error) => setError(nextError.message))
       .finally(() => {
         setLoading(false);
@@ -434,9 +439,8 @@ export function FuelInventoryClient() {
     }
   }
   const canManageTankCalibration = hasPermission(role, "tankCalibrationManage");
-  const profiles = listTankCalibrationProfiles();
   const selectedTank = stationTanks.find((tank) => tank.id === selectedTankId) ?? null;
-  const selectedProfile = profiles.find((profile) => profile.id === selectedTank?.profile_key);
+  const selectedProfile = profiles.find((profile) => profile.id === selectedTank?.calibration_profile_id);
   const crossCheckResult = (() => {
     if (!selectedProfile || !cmsReading) return null;
     const reading = Number(cmsReading);
@@ -896,11 +900,12 @@ export function FuelInventoryClient() {
         )}
       </SimpleModal>
       <SimpleModal open={tankSetupOpen} onClose={() => setTankSetupOpen(false)} title="Tank Setup" description="Assign calibration profile per station/product tank.">
+        {profileLoadMessage ? <p className="rounded border border-amber-200 bg-amber-50 p-2 text-sm text-amber-800">{profileLoadMessage}</p> : null}
         <form className="space-y-2" onSubmit={handleSaveTankSetup}>
           <select className="w-full rounded-md border px-3 py-2 text-sm" value={tankSetupForm.station_id} onChange={(e)=>setTankSetupForm((p)=>({...p,station_id:e.target.value}))}><option value="">Select station</option>{setupStations.map((station)=><option key={station.id} value={station.id}>{station.name}</option>)}</select>
           <select className="w-full rounded-md border px-3 py-2 text-sm" value={tankSetupForm.product_type} onChange={(e)=>setTankSetupForm((p)=>({...p,product_type:e.target.value}))}><option value="DIESEL">Diesel</option><option value="SPECIAL">Special/Premium</option><option value="UNLEADED">Unleaded</option></select>
           <Input placeholder="Tank name" value={tankSetupForm.tank_name} onChange={(e)=>setTankSetupForm((p)=>({...p,tank_name:e.target.value}))}/>
-          <select className="w-full rounded-md border px-3 py-2 text-sm" value={tankSetupForm.calibration_profile_id} onChange={(e)=>setTankSetupForm((p)=>({...p,calibration_profile_id:e.target.value}))}><option value="">Select profile</option>{profiles.map((profile)=><option key={profile.id} value={profile.id}>{profile.name}</option>)}</select>
+          <select className="w-full rounded-md border px-3 py-2 text-sm" value={tankSetupForm.calibration_profile_id} onChange={(e)=>setTankSetupForm((p)=>({...p,calibration_profile_id:e.target.value}))}><option value="">Select profile</option>{profiles.map((profile)=><option key={profile.id} value={profile.id}>{profile.name} ({profile.profileKey})</option>)}</select>
           <Input type="number" placeholder="Reorder threshold liters" value={tankSetupForm.reorder_threshold_liters} onChange={(e)=>setTankSetupForm((p)=>({...p,reorder_threshold_liters:e.target.value}))}/>
           <Input type="number" placeholder="Variance tolerance liters" value={tankSetupForm.variance_tolerance_liters} onChange={(e)=>setTankSetupForm((p)=>({...p,variance_tolerance_liters:e.target.value}))}/>
           <Button type="submit">Save assignment</Button>
