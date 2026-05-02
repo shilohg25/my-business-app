@@ -22,6 +22,16 @@ import {
   voidFuelOpeningBaseline
 } from "@/lib/data/fuel-inventory";
 import { fetchCurrentProfile } from "@/lib/data/profile";
+import { hasPermission } from "@/lib/auth/permissions";
+import { buildTankCalibrationDisplay } from "@/lib/domain/tankCalibrationDisplay";
+import { litersFromDipstickCm, validateDipstickReading } from "@/lib/domain/tankCalibration";
+import {
+  createOrUpdateStationTank,
+  listStationsForTankSetup,
+  listStationTanks,
+  listTankCalibrationProfiles,
+  saveTankStickReading
+} from "@/lib/data/tank-calibration";
 import { getSupabaseConfigurationState } from "@/lib/supabase/client";
 import { formatLiters, formatVariance } from "@/lib/utils/format";
 import { areFiltersDefault, getCurrentMonthDateRange } from "@/lib/utils/filters";
@@ -125,6 +135,13 @@ export function FuelInventoryClient() {
     unit_cost: "",
     notes: ""
   });
+  const [tankCrossCheckOpen, setTankCrossCheckOpen] = useState(false);
+  const [tankSetupOpen, setTankSetupOpen] = useState(false);
+  const [stationTanks, setStationTanks] = useState<Awaited<ReturnType<typeof listStationTanks>>>([]);
+  const [setupStations, setSetupStations] = useState<Array<{ id: string; name: string }>>([]);
+  const [selectedTankId, setSelectedTankId] = useState("");
+  const [cmsReading, setCmsReading] = useState("");
+  const [tankSetupForm, setTankSetupForm] = useState({ station_id: "", product_type: "DIESEL", tank_name: "", calibration_profile_id: "", reorder_threshold_liters: "", variance_tolerance_liters: "" });
 
   useEffect(() => {
     if (datePreset === "TODAY") {
@@ -209,8 +226,8 @@ export function FuelInventoryClient() {
       return profile?.role ?? null;
     };
 
-    Promise.all([reload(), loadRole(), fetchAllowedDeliveryStations()])
-      .then(([, nextRole, stations]) => { setRole(nextRole); setAllowedDeliveryStations(stations); })
+    Promise.all([reload(), loadRole(), fetchAllowedDeliveryStations(), listStationTanks(), listStationsForTankSetup()])
+      .then(([, nextRole, stations, tanks, setupStationRows]) => { setRole(nextRole); setAllowedDeliveryStations(stations); setStationTanks(tanks); setSetupStations(setupStationRows); })
       .catch((nextError: Error) => setError(nextError.message))
       .finally(() => {
         setLoading(false);
@@ -416,6 +433,30 @@ export function FuelInventoryClient() {
       setDeliverySaving(false);
     }
   }
+  const canManageTankCalibration = hasPermission(role, "tankCalibrationManage");
+  const profiles = listTankCalibrationProfiles();
+  const selectedTank = stationTanks.find((tank) => tank.id === selectedTankId) ?? null;
+  const selectedProfile = profiles.find((profile) => profile.id === selectedTank?.profile_key);
+  const crossCheckResult = (() => {
+    if (!selectedProfile || !cmsReading) return null;
+    const reading = Number(cmsReading);
+    validateDipstickReading(selectedProfile, reading);
+    return buildTankCalibrationDisplay(selectedProfile, reading, selectedTank?.reorder_threshold_liters ?? null);
+  })();
+  async function handleSaveTankSetup(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await createOrUpdateStationTank({
+      station_id: tankSetupForm.station_id,
+      product_type: tankSetupForm.product_type,
+      tank_name: tankSetupForm.tank_name,
+      calibration_profile_id: tankSetupForm.calibration_profile_id,
+      reorder_threshold_liters: tankSetupForm.reorder_threshold_liters ? Number(tankSetupForm.reorder_threshold_liters) : null,
+      variance_tolerance_liters: tankSetupForm.variance_tolerance_liters ? Number(tankSetupForm.variance_tolerance_liters) : null
+    });
+    setStationTanks(await listStationTanks());
+    setMessage("Tank assignment saved.");
+    setTankSetupOpen(false);
+  }
 
   return (
     <div className="space-y-6">
@@ -427,7 +468,21 @@ export function FuelInventoryClient() {
         <Button onClick={() => setDeliveryModalOpen(true)} type="button" variant="outline">
           Record Fuel Delivery
         </Button>
+        {canManageTankCalibration ? <Button onClick={() => setTankCrossCheckOpen(true)} type="button">Tank CMS Cross-Check</Button> : null}
+        {canManageTankCalibration ? <Button onClick={() => setTankSetupOpen(true)} type="button" variant="outline">Tank Setup</Button> : null}
       </div>
+      {canManageTankCalibration ? (
+        <Card>
+          <CardHeader><CardTitle>Owner tank summary</CardTitle></CardHeader>
+          <CardContent>
+            {!stationTanks.length ? <p className="text-sm text-amber-800">No tank profile assigned yet. Assign a calibration profile before CMS liters can be calculated.</p> : (
+              <table className="w-full text-sm"><thead><tr><th>Station</th><th>Product</th><th>Tank</th><th>Profile</th><th>Reorder threshold</th><th>Status</th></tr></thead><tbody>
+                {stationTanks.map((tank)=><tr key={tank.id} className="border-t"><td>{tank.station_name}</td><td>{tank.product_type}</td><td>{tank.tank_name}</td><td>{tank.profile_name}</td><td>{tank.reorder_threshold_liters ?? "-"}</td><td>No CMS reading yet.</td></tr>)}
+              </tbody></table>
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
 
       {!liveData ? <div className="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{config.reason}</div> : null}
       {error ? <div className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
@@ -829,6 +884,28 @@ export function FuelInventoryClient() {
       </SimpleModal>
 
       {loading ? <p className="text-sm text-slate-500">Loading fuel inventory...</p> : null}
+      <SimpleModal open={tankCrossCheckOpen} onClose={() => setTankCrossCheckOpen(false)} title="Tank CMS Cross-Check" description="Owner-only CMS to liters cross-check.">
+        {!stationTanks.length ? <p className="text-sm text-amber-800">No tank profile assigned yet. Assign a calibration profile before CMS liters can be calculated.</p> : (
+          <div className="space-y-2">
+            <select className="w-full rounded-md border px-3 py-2 text-sm" value={selectedTankId} onChange={(e)=>setSelectedTankId(e.target.value)}><option value="">Select station/product tank</option>{stationTanks.map((tank)=><option key={tank.id} value={tank.id}>{tank.station_name} • {tank.product_type} • {tank.tank_name}</option>)}</select>
+            <Input type="number" placeholder="CMS reading (cm)" value={cmsReading} onChange={(e)=>setCmsReading(e.target.value)} />
+            {selectedTank ? <p className="text-xs text-slate-600">Assigned profile: {selectedTank.profile_name} • Max CMS range: {selectedTank.max_dipstick_cm} cm</p> : null}
+            {crossCheckResult ? <div className="rounded border p-2 text-sm"><p>Decimal liters: {crossCheckResult.decimalLiters.toFixed(3)}</p><p>Rounded liters: {crossCheckResult.roundedLiters}</p><p>Capacity percent: {crossCheckResult.capacityPercent.toFixed(2)}%</p><p>Ullage liters: {crossCheckResult.ullageLiters.toFixed(3)}</p><p className={crossCheckResult.needsReorder ? "text-amber-700" : "text-emerald-700"}>{crossCheckResult.needsReorder ? "ORDER NEEDED" : "OK"}</p></div> : null}
+            <Button type="button" disabled={!selectedTank || !cmsReading} onClick={async ()=>{await saveTankStickReading({station_tank_id:selectedTank!.id,report_date:new Date().toISOString().slice(0,10),reading_cm:Number(cmsReading),source:"web"}); setMessage("CMS reading saved.");}}>Save CMS reading</Button>
+          </div>
+        )}
+      </SimpleModal>
+      <SimpleModal open={tankSetupOpen} onClose={() => setTankSetupOpen(false)} title="Tank Setup" description="Assign calibration profile per station/product tank.">
+        <form className="space-y-2" onSubmit={handleSaveTankSetup}>
+          <select className="w-full rounded-md border px-3 py-2 text-sm" value={tankSetupForm.station_id} onChange={(e)=>setTankSetupForm((p)=>({...p,station_id:e.target.value}))}><option value="">Select station</option>{setupStations.map((station)=><option key={station.id} value={station.id}>{station.name}</option>)}</select>
+          <select className="w-full rounded-md border px-3 py-2 text-sm" value={tankSetupForm.product_type} onChange={(e)=>setTankSetupForm((p)=>({...p,product_type:e.target.value}))}><option value="DIESEL">Diesel</option><option value="SPECIAL">Special/Premium</option><option value="UNLEADED">Unleaded</option></select>
+          <Input placeholder="Tank name" value={tankSetupForm.tank_name} onChange={(e)=>setTankSetupForm((p)=>({...p,tank_name:e.target.value}))}/>
+          <select className="w-full rounded-md border px-3 py-2 text-sm" value={tankSetupForm.calibration_profile_id} onChange={(e)=>setTankSetupForm((p)=>({...p,calibration_profile_id:e.target.value}))}><option value="">Select profile</option>{profiles.map((profile)=><option key={profile.id} value={profile.id}>{profile.name}</option>)}</select>
+          <Input type="number" placeholder="Reorder threshold liters" value={tankSetupForm.reorder_threshold_liters} onChange={(e)=>setTankSetupForm((p)=>({...p,reorder_threshold_liters:e.target.value}))}/>
+          <Input type="number" placeholder="Variance tolerance liters" value={tankSetupForm.variance_tolerance_liters} onChange={(e)=>setTankSetupForm((p)=>({...p,variance_tolerance_liters:e.target.value}))}/>
+          <Button type="submit">Save assignment</Button>
+        </form>
+      </SimpleModal>
     </div>
   );
 }
