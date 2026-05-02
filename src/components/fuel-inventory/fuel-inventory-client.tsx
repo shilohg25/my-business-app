@@ -27,6 +27,7 @@ import { buildTankCalibrationDisplay } from "@/lib/domain/tankCalibrationDisplay
 import { litersFromDipstickCm, validateDipstickReading } from "@/lib/domain/tankCalibration";
 import {
   createOrUpdateStationTank,
+  ensureVerifiedTankCalibrationProfilesSeeded,
   listStationsForTankSetup,
   listStationTanks,
   listTankCalibrationProfiles,
@@ -68,6 +69,10 @@ function stationAggregateStatus(variance: number, baselineStatus: string) {
   if (baselineStatus === "voided") return "Voided baseline";
   if (Math.abs(variance) <= 0.001) return "Balanced";
   return variance > 0 ? "Fuel over" : "Fuel shortage";
+}
+
+export function shouldPrepareOwnerCalibrationProfiles(roleChecking: boolean, role: string | null) {
+  return !roleChecking && role === "Owner";
 }
 
 export function FuelInventoryClient() {
@@ -230,9 +235,27 @@ export function FuelInventoryClient() {
     };
 
     setPreparingProfiles(true);
-    Promise.all([reload(), loadRole(), fetchAllowedDeliveryStations(), listStationTanks(), listStationsForTankSetup(), listTankCalibrationProfiles()])
-      .then(([, nextRole, stations, tanks, setupStationRows, calibrationProfiles]) => {
-        setRole(nextRole); setAllowedDeliveryStations(stations); setStationTanks(tanks); setSetupStations(setupStationRows); setProfiles(calibrationProfiles);
+    Promise.all([reload(), loadRole(), fetchAllowedDeliveryStations(), listStationTanks(), listStationsForTankSetup()])
+      .then(async ([, nextRole, stations, tanks, setupStationRows]) => {
+        setRole(nextRole);
+        setAllowedDeliveryStations(stations);
+        setStationTanks(tanks);
+        setSetupStations(setupStationRows);
+
+        if (!nextRole) {
+          setProfileLoadMessage("No active Owner profile found. Tank calibration setup is owner-only.");
+          setProfiles([]);
+          return;
+        }
+
+        if (nextRole !== "Owner") {
+          setProfileLoadMessage("No active Owner profile found. Tank calibration setup is owner-only.");
+          setProfiles([]);
+          return;
+        }
+
+        const seededProfiles = await ensureVerifiedTankCalibrationProfilesSeeded();
+        setProfiles(seededProfiles.length ? seededProfiles : await listTankCalibrationProfiles());
         setProfileLoadMessage(null);
       })
       .catch((nextError: any) => {
