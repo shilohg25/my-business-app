@@ -17,6 +17,15 @@ export type StationTankRecord = {
   calculated_full_liters: number;
 };
 
+export type OwnerTankSummaryRecord = StationTankRecord & {
+  station_tank_id: string;
+  latest_reading_id: string | null;
+  latest_reading_cm: number | null;
+  latest_reading_at: string | null;
+  latest_reading_report_date: string | null;
+  latest_reading_source: string | null;
+};
+
 export type TankCalibrationProfileOption = {
   id: string;
   profileKey: string;
@@ -137,6 +146,35 @@ export async function listStationTanks(): Promise<StationTankRecord[]> {
   }));
 }
 
+export async function listOwnerTankSummary(): Promise<OwnerTankSummaryRecord[]> {
+  const tanks = await listStationTanks();
+  if (!canUseLiveData() || !tanks.length) return tanks.map((tank) => ({ ...tank, station_tank_id: tank.id, latest_reading_id: null, latest_reading_cm: null, latest_reading_at: null, latest_reading_report_date: null, latest_reading_source: null }));
+  const supabase = createSupabaseBrowserClient();
+  const tankIds = tanks.map((tank) => tank.id);
+  const { data, error } = await supabase
+    .from("tank_stick_readings")
+    .select("id, station_tank_id, report_date, reading_cm, entered_at, source")
+    .in("station_tank_id", tankIds)
+    .order("entered_at", { ascending: false });
+  if (error) throw error;
+  const latestByTank = new Map<string, any>();
+  for (const row of data ?? []) {
+    if (!latestByTank.has(row.station_tank_id)) latestByTank.set(row.station_tank_id, row);
+  }
+  return tanks.map((tank) => {
+    const latest = latestByTank.get(tank.id);
+    return {
+      ...tank,
+      station_tank_id: tank.id,
+      latest_reading_id: latest?.id ?? null,
+      latest_reading_cm: latest?.reading_cm == null ? null : Number(latest.reading_cm),
+      latest_reading_at: latest?.entered_at ?? null,
+      latest_reading_report_date: latest?.report_date ?? null,
+      latest_reading_source: latest?.source ?? null
+    };
+  });
+}
+
 export async function createOrUpdateStationTank(payload: {
   id?: string;
   station_id: string;
@@ -165,6 +203,13 @@ export async function createOrUpdateStationTank(payload: {
   const { data, error } = await supabase.from("station_tanks").insert(record).select("id").single();
   if (error) throw error;
   return data?.id as string;
+}
+
+export async function archiveStationTank(stationTankId: string) {
+  if (!canUseLiveData()) throw new Error("Supabase is not configured");
+  const supabase = createSupabaseBrowserClient();
+  const { error } = await supabase.from("station_tanks").update({ active: false, archived_at: new Date().toISOString() }).eq("id", stationTankId);
+  if (error) throw error;
 }
 
 export async function getLatestTankStickReading(stationTankId: string) {
@@ -210,4 +255,3 @@ export async function saveTankCrossCheck(payload: {
   if (error) throw error;
   return data?.id as string;
 }
-

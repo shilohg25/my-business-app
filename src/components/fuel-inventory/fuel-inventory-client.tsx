@@ -26,10 +26,11 @@ import { hasPermission } from "@/lib/auth/permissions";
 import { buildTankCalibrationDisplay } from "@/lib/domain/tankCalibrationDisplay";
 import { litersFromDipstickCm, validateDipstickReading } from "@/lib/domain/tankCalibration";
 import {
+  archiveStationTank,
   createOrUpdateStationTank,
   ensureVerifiedTankCalibrationProfilesSeeded,
+  listOwnerTankSummary,
   listStationsForTankSetup,
-  listStationTanks,
   listTankCalibrationProfiles,
   saveTankStickReading
 } from "@/lib/data/tank-calibration";
@@ -142,13 +143,14 @@ export function FuelInventoryClient() {
   });
   const [tankCrossCheckOpen, setTankCrossCheckOpen] = useState(false);
   const [tankSetupOpen, setTankSetupOpen] = useState(false);
-  const [stationTanks, setStationTanks] = useState<Awaited<ReturnType<typeof listStationTanks>>>([]);
+  const [stationTanks, setStationTanks] = useState<Awaited<ReturnType<typeof listOwnerTankSummary>>>([]);
   const [setupStations, setSetupStations] = useState<Array<{ id: string; name: string }>>([]);
   const [profiles, setProfiles] = useState<Awaited<ReturnType<typeof listTankCalibrationProfiles>>>([]);
   const [profileLoadMessage, setProfileLoadMessage] = useState<string | null>(null);
   const [preparingProfiles, setPreparingProfiles] = useState(false);
   const [selectedTankId, setSelectedTankId] = useState("");
   const [cmsReading, setCmsReading] = useState("");
+  const [editingTankId, setEditingTankId] = useState<string | null>(null);
   const [tankSetupForm, setTankSetupForm] = useState({ station_id: "", product_type: "DIESEL", tank_name: "", calibration_profile_id: "", reorder_threshold_liters: "", variance_tolerance_liters: "" });
 
   useEffect(() => {
@@ -235,7 +237,7 @@ export function FuelInventoryClient() {
     };
 
     setPreparingProfiles(true);
-    Promise.all([reload(), loadRole(), fetchAllowedDeliveryStations(), listStationTanks(), listStationsForTankSetup()])
+    Promise.all([reload(), loadRole(), fetchAllowedDeliveryStations(), listOwnerTankSummary(), listStationsForTankSetup()])
       .then(async ([, nextRole, stations, tanks, setupStationRows]) => {
         setRole(nextRole);
         setAllowedDeliveryStations(stations);
@@ -484,7 +486,17 @@ export function FuelInventoryClient() {
   })();
   async function handleSaveTankSetup(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if ((tankSetupForm.reorder_threshold_liters && Number(tankSetupForm.reorder_threshold_liters) < 0) || (tankSetupForm.variance_tolerance_liters && Number(tankSetupForm.variance_tolerance_liters) < 0)) {
+      setError("Reorder threshold and variance tolerance must be non-negative.");
+      return;
+    }
+    const duplicate = stationTanks.find((tank) => tank.id !== editingTankId && tank.station_id === tankSetupForm.station_id && tank.product_type === tankSetupForm.product_type && tank.tank_name.trim().toLowerCase() === tankSetupForm.tank_name.trim().toLowerCase());
+    if (duplicate) {
+      setError("Duplicate warning: an active assignment already exists with the same station, product, and tank name.");
+      return;
+    }
     await createOrUpdateStationTank({
+      id: editingTankId ?? undefined,
       station_id: tankSetupForm.station_id,
       product_type: tankSetupForm.product_type,
       tank_name: tankSetupForm.tank_name,
@@ -492,8 +504,9 @@ export function FuelInventoryClient() {
       reorder_threshold_liters: tankSetupForm.reorder_threshold_liters ? Number(tankSetupForm.reorder_threshold_liters) : null,
       variance_tolerance_liters: tankSetupForm.variance_tolerance_liters ? Number(tankSetupForm.variance_tolerance_liters) : null
     });
-    setStationTanks(await listStationTanks());
+    setStationTanks(await listOwnerTankSummary());
     setMessage("Tank assignment saved.");
+    setEditingTankId(null);
     setTankSetupOpen(false);
   }
   const canSaveTankSetup =
@@ -520,8 +533,13 @@ export function FuelInventoryClient() {
           <CardHeader><CardTitle>Owner tank summary</CardTitle></CardHeader>
           <CardContent>
             {!stationTanks.length ? <p className="text-sm text-amber-800">No tank profile assigned yet. Assign a calibration profile before CMS liters can be calculated.</p> : (
-              <table className="w-full text-sm"><thead><tr><th>Station</th><th>Product</th><th>Tank</th><th>Profile</th><th>Reorder threshold</th><th>Status</th></tr></thead><tbody>
-                {stationTanks.map((tank)=><tr key={tank.id} className="border-t"><td>{tank.station_name}</td><td>{tank.product_type}</td><td>{tank.tank_name}</td><td>{tank.profile_name}</td><td>{tank.reorder_threshold_liters ?? "-"}</td><td>No CMS reading yet.</td></tr>)}
+              <table className="w-full text-sm"><thead><tr><th>Station</th><th>Product</th><th>Tank</th><th>Profile</th><th>Latest CMS</th><th>Liters remaining</th><th>Capacity %</th><th>Ullage</th><th>Reorder threshold</th><th>Status</th><th>Actions</th></tr></thead><tbody>
+                {stationTanks.map((tank) => {
+                  const profile = profiles.find((p) => p.id === tank.calibration_profile_id);
+                  const display = profile && tank.latest_reading_cm != null ? buildTankCalibrationDisplay(profile, tank.latest_reading_cm, tank.reorder_threshold_liters) : null;
+                  const status = tank.latest_reading_cm == null ? "Needs CMS reading" : tank.reorder_threshold_liters == null ? "No threshold set" : display?.needsReorder ? "ORDER NEEDED" : "OK";
+                  return <tr key={tank.id} className="border-t"><td>{tank.station_name}</td><td>{tank.product_type}</td><td>{tank.tank_name}</td><td>{tank.profile_name}</td><td>{tank.latest_reading_cm == null ? "No CMS yet" : `${tank.latest_reading_cm} cm`}</td><td>{display ? `${display.roundedLiters.toLocaleString()} L` : "—"}</td><td>{display ? `${display.capacityPercent.toFixed(1)}%` : "—"}</td><td>{display ? `${Math.round(display.ullageLiters).toLocaleString()} L` : "—"}</td><td>{tank.reorder_threshold_liters == null ? "-" : `${tank.reorder_threshold_liters.toLocaleString()} L`}</td><td>{status}</td><td><div className="flex gap-1"><Button size="sm" variant="outline" type="button" onClick={() => { setEditingTankId(tank.id); setTankSetupForm({ station_id: tank.station_id, product_type: tank.product_type, tank_name: tank.tank_name, calibration_profile_id: tank.calibration_profile_id, reorder_threshold_liters: tank.reorder_threshold_liters?.toString() ?? "", variance_tolerance_liters: tank.variance_tolerance_liters?.toString() ?? "" }); setTankSetupOpen(true); }}>Edit</Button><Button size="sm" variant="outline" type="button" onClick={async () => { if (!window.confirm(`Archive tank assignment ${tank.tank_name}?`)) return; await archiveStationTank(tank.id); setStationTanks(await listOwnerTankSummary()); setMessage("Tank assignment archived."); }}>Archive</Button></div></td></tr>;
+                })}
               </tbody></table>
             )}
           </CardContent>
@@ -935,7 +953,7 @@ export function FuelInventoryClient() {
             <Input type="number" placeholder="CMS reading (cm)" value={cmsReading} onChange={(e)=>setCmsReading(e.target.value)} />
             {selectedTank ? <p className="text-xs text-slate-600">Assigned profile: {selectedTank.profile_name} • Max CMS range: {selectedTank.max_dipstick_cm} cm</p> : null}
             {crossCheckResult ? <div className="rounded border p-2 text-sm"><p>Decimal liters: {crossCheckResult.decimalLiters.toFixed(3)}</p><p>Rounded liters: {crossCheckResult.roundedLiters}</p><p>Capacity percent: {crossCheckResult.capacityPercent.toFixed(2)}%</p><p>Ullage liters: {crossCheckResult.ullageLiters.toFixed(3)}</p><p className={crossCheckResult.needsReorder ? "text-amber-700" : "text-emerald-700"}>{crossCheckResult.needsReorder ? "ORDER NEEDED" : "OK"}</p></div> : null}
-            <Button type="button" disabled={!selectedTank || !cmsReading} onClick={async ()=>{await saveTankStickReading({station_tank_id:selectedTank!.id,report_date:new Date().toISOString().slice(0,10),reading_cm:Number(cmsReading),source:"web"}); setMessage("CMS reading saved.");}}>Save CMS reading</Button>
+            <Button type="button" disabled={!selectedTank || !cmsReading} onClick={async ()=>{await saveTankStickReading({station_tank_id:selectedTank!.id,report_date:new Date().toISOString().slice(0,10),reading_cm:Number(cmsReading),source:"web"}); setStationTanks(await listOwnerTankSummary()); setMessage("CMS reading saved and tank summary updated.");}}>Save CMS Reading</Button>
           </div>
         )}
       </SimpleModal>
@@ -949,7 +967,7 @@ export function FuelInventoryClient() {
           <select className="w-full rounded-md border px-3 py-2 text-sm" value={tankSetupForm.calibration_profile_id} onChange={(e)=>setTankSetupForm((p)=>({...p,calibration_profile_id:e.target.value}))}><option value="">Select profile</option>{profiles.map((profile)=><option key={profile.id} value={profile.id}>{profile.name} ({profile.profileKey})</option>)}</select>
           <Input type="number" placeholder="Reorder threshold liters" value={tankSetupForm.reorder_threshold_liters} onChange={(e)=>setTankSetupForm((p)=>({...p,reorder_threshold_liters:e.target.value}))}/>
           <Input type="number" placeholder="Variance tolerance liters" value={tankSetupForm.variance_tolerance_liters} onChange={(e)=>setTankSetupForm((p)=>({...p,variance_tolerance_liters:e.target.value}))}/>
-          <Button type="submit" disabled={!canSaveTankSetup}>Save assignment</Button>
+          <Button type="submit" disabled={!canSaveTankSetup}>{editingTankId ? "Save update" : "Save assignment"}</Button>
         </form>
       </SimpleModal>
     </div>

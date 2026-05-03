@@ -3,9 +3,11 @@ import { readFileSync } from "node:fs";
 import { buildTankCalibrationDisplay } from "@/lib/domain/tankCalibrationDisplay";
 import { VERIFIED_TANK_PROFILES } from "@/lib/domain/tankCalibration";
 import {
+  archiveStationTank,
   createOrUpdateStationTank,
   ensureVerifiedTankCalibrationProfilesSeeded,
   isUuid,
+  listOwnerTankSummary,
   listTankCalibrationProfiles,
   resolveCalibrationProfileId
 } from "@/lib/data/tank-calibration";
@@ -69,6 +71,61 @@ describe("tank calibration integration helpers", () => {
     fromMock.mockImplementation((table: string) => ({ select: () => ({ is: () => ({ order: async () => ({ data: [{ id: "11111111-1111-4111-8111-111111111111", profile_key: "ugt_16kl_202x488", name: "A", formula_type: "horizontal_cylinder", diameter_cm: 202, radius_cm: 101, length_cm: 488, max_dipstick_cm: 202, nominal_label: "n", calculated_full_liters: 1, rounded_full_liters: 1, is_verified: true, is_owner_only: true }], error: null }) }) }) }));
     await listTankCalibrationProfiles();
     expect(rpcMock).not.toHaveBeenCalled();
+  });
+
+  it("includes latest CMS reading in owner tank summary", async () => {
+    fromMock.mockImplementation((table: string) => {
+      if (table === "station_tanks") {
+        return {
+          select: () => ({
+            eq: () => ({
+              is: () => ({
+                order: async () => ({
+                  data: [{
+                    id: "tank-1",
+                    station_id: "station-1",
+                    product_type: "DIESEL",
+                    tank_name: "Main",
+                    reorder_threshold_liters: 5000,
+                    variance_tolerance_liters: 200,
+                    fuel_stations: { name: "Station A" },
+                    tank_calibration_profiles: { id: profile.id, profile_key: profile.profileKey, name: profile.name, max_dipstick_cm: profile.maxDipstickCm, calculated_full_liters: profile.calculatedFullLiters }
+                  }],
+                  error: null
+                })
+              })
+            })
+          })
+        };
+      }
+      if (table === "tank_stick_readings") {
+        return {
+          select: () => ({
+            in: () => ({
+              order: async () => ({
+                data: [{ id: "r1", station_tank_id: "tank-1", report_date: "2026-05-03", reading_cm: 94, entered_at: "2026-05-03T01:00:00Z", source: "web" }],
+                error: null
+              })
+            })
+          })
+        };
+      }
+      throw new Error(`Unexpected table ${table}`);
+    });
+    const rows = await listOwnerTankSummary();
+    expect(rows[0].latest_reading_cm).toBe(94);
+  });
+
+  it("archives by setting active false and archived_at", async () => {
+    const eqMock = vi.fn().mockResolvedValue({ error: null });
+    const updateMock = vi.fn().mockReturnValue({ eq: eqMock });
+    fromMock.mockImplementation((table: string) => {
+      if (table === "station_tanks") return { update: updateMock };
+      throw new Error(`Unexpected table ${table}`);
+    });
+    await archiveStationTank("tank-1");
+    expect(updateMock).toHaveBeenCalledWith(expect.objectContaining({ active: false, archived_at: expect.any(String) }));
+    expect(eqMock).toHaveBeenCalledWith("id", "tank-1");
   });
 
   it("role gating helper blocks null/non-owner and allows owner", () => {
