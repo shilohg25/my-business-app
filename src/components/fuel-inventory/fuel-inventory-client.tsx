@@ -151,7 +151,7 @@ export function FuelInventoryClient() {
   const [selectedTankId, setSelectedTankId] = useState("");
   const [cmsReading, setCmsReading] = useState("");
   const [editingTankId, setEditingTankId] = useState<string | null>(null);
-  const [tankSetupForm, setTankSetupForm] = useState({ station_id: "", product_type: "DIESEL", tank_name: "", calibration_profile_id: "", reorder_threshold_liters: "", variance_tolerance_liters: "" });
+  const [tankSetupForm, setTankSetupForm] = useState({ station_id: "", product_type: "DIESEL", tank_name: "", calibration_mode: "verified_profile", calibration_profile_id: "", reorder_threshold_liters: "", variance_tolerance_liters: "" });
 
   useEffect(() => {
     if (datePreset === "TODAY") {
@@ -500,7 +500,8 @@ export function FuelInventoryClient() {
       station_id: tankSetupForm.station_id,
       product_type: tankSetupForm.product_type,
       tank_name: tankSetupForm.tank_name,
-      calibration_profile_id: tankSetupForm.calibration_profile_id,
+      calibration_mode: tankSetupForm.calibration_mode as "verified_profile" | "manual_table" | "historical_emptying",
+      calibration_profile_id: tankSetupForm.calibration_mode === "historical_emptying" ? null : tankSetupForm.calibration_profile_id,
       reorder_threshold_liters: tankSetupForm.reorder_threshold_liters ? Number(tankSetupForm.reorder_threshold_liters) : null,
       variance_tolerance_liters: tankSetupForm.variance_tolerance_liters ? Number(tankSetupForm.variance_tolerance_liters) : null
     });
@@ -513,7 +514,7 @@ export function FuelInventoryClient() {
     Boolean(tankSetupForm.station_id) &&
     Boolean(tankSetupForm.product_type) &&
     Boolean(tankSetupForm.tank_name.trim()) &&
-    Boolean(tankSetupForm.calibration_profile_id);
+    (tankSetupForm.calibration_mode === "historical_emptying" || Boolean(tankSetupForm.calibration_profile_id));
 
   return (
     <div className="space-y-6">
@@ -538,7 +539,7 @@ export function FuelInventoryClient() {
                   const profile = profiles.find((p) => p.id === tank.calibration_profile_id);
                   const display = profile && tank.latest_reading_cm != null ? buildTankCalibrationDisplay(profile, tank.latest_reading_cm, tank.reorder_threshold_liters) : null;
                   const status = tank.latest_reading_cm == null ? "Needs CMS reading" : tank.reorder_threshold_liters == null ? "No threshold set" : display?.needsReorder ? "ORDER NEEDED" : "OK";
-                  return <tr key={tank.id} className="border-t"><td>{tank.station_name}</td><td>{tank.product_type}</td><td>{tank.tank_name}</td><td>{tank.profile_name}</td><td>{tank.latest_reading_cm == null ? "No CMS yet" : `${tank.latest_reading_cm} cm`}</td><td>{display ? `${display.roundedLiters.toLocaleString()} L` : "—"}</td><td>{display ? `${display.capacityPercent.toFixed(1)}%` : "—"}</td><td>{display ? `${Math.round(display.ullageLiters).toLocaleString()} L` : "—"}</td><td>{tank.reorder_threshold_liters == null ? "-" : `${tank.reorder_threshold_liters.toLocaleString()} L`}</td><td>{status}</td><td><div className="flex gap-1"><Button size="sm" variant="outline" type="button" onClick={() => { setEditingTankId(tank.id); setTankSetupForm({ station_id: tank.station_id, product_type: tank.product_type, tank_name: tank.tank_name, calibration_profile_id: tank.calibration_profile_id, reorder_threshold_liters: tank.reorder_threshold_liters?.toString() ?? "", variance_tolerance_liters: tank.variance_tolerance_liters?.toString() ?? "" }); setTankSetupOpen(true); }}>Edit</Button><Button size="sm" variant="outline" type="button" onClick={async () => { if (!window.confirm(`Archive tank assignment ${tank.tank_name}?`)) return; await archiveStationTank(tank.id); setStationTanks(await listOwnerTankSummary()); setMessage("Tank assignment archived."); }}>Archive</Button></div></td></tr>;
+                  return <tr key={tank.id} className="border-t"><td>{tank.station_name}</td><td>{tank.product_type}</td><td>{tank.tank_name}</td><td>{tank.calibration_mode === "historical_emptying" ? "Historical empty-tank data only" : tank.profile_name}</td><td>{tank.latest_reading_cm == null ? "No CMS yet" : `${tank.latest_reading_cm} cm`}</td><td>{display ? `${display.roundedLiters.toLocaleString()} L` : "—"}</td><td>{display ? `${display.capacityPercent.toFixed(1)}%` : "—"}</td><td>{display ? `${Math.round(display.ullageLiters).toLocaleString()} L` : "—"}</td><td>{tank.reorder_threshold_liters == null ? "-" : `${tank.reorder_threshold_liters.toLocaleString()} L`}</td><td>{status}</td><td><div className="flex gap-1"><Button size="sm" variant="outline" type="button" onClick={() => { setEditingTankId(tank.id); setTankSetupForm({ station_id: tank.station_id, product_type: tank.product_type, tank_name: tank.tank_name, calibration_mode: tank.calibration_mode, calibration_profile_id: tank.calibration_profile_id ?? "", reorder_threshold_liters: tank.reorder_threshold_liters?.toString() ?? "", variance_tolerance_liters: tank.variance_tolerance_liters?.toString() ?? "" }); setTankSetupOpen(true); }}>Edit</Button><Button size="sm" variant="outline" type="button" onClick={async () => { if (!window.confirm(`Archive tank assignment ${tank.tank_name}?`)) return; await archiveStationTank(tank.id); setStationTanks(await listOwnerTankSummary()); setMessage("Tank assignment archived."); }}>Archive</Button></div></td></tr>;
                 })}
               </tbody></table>
             )}
@@ -957,14 +958,20 @@ export function FuelInventoryClient() {
           </div>
         )}
       </SimpleModal>
-      <SimpleModal open={tankSetupOpen} onClose={() => setTankSetupOpen(false)} title="Tank Setup" description="Assign calibration profile per station/product tank.">
+      <SimpleModal open={tankSetupOpen} onClose={() => setTankSetupOpen(false)} title="Tank Setup" description="Assign calibration mode per station/product tank.">
         {preparingProfiles ? <p className="rounded border border-slate-200 bg-slate-50 p-2 text-sm text-slate-700">Preparing verified tank calibration profiles...</p> : null}
         {profileLoadMessage ? <p className="rounded border border-amber-200 bg-amber-50 p-2 text-sm text-amber-800">{profileLoadMessage}</p> : null}
         <form className="space-y-2" onSubmit={handleSaveTankSetup}>
           <select className="w-full rounded-md border px-3 py-2 text-sm" value={tankSetupForm.station_id} onChange={(e)=>setTankSetupForm((p)=>({...p,station_id:e.target.value}))}><option value="">Select station</option>{setupStations.map((station)=><option key={station.id} value={station.id}>{station.name}</option>)}</select>
           <select className="w-full rounded-md border px-3 py-2 text-sm" value={tankSetupForm.product_type} onChange={(e)=>setTankSetupForm((p)=>({...p,product_type:e.target.value}))}><option value="DIESEL">Diesel</option><option value="SPECIAL">Special/Premium</option><option value="UNLEADED">Unleaded</option></select>
           <Input placeholder="Tank name" value={tankSetupForm.tank_name} onChange={(e)=>setTankSetupForm((p)=>({...p,tank_name:e.target.value}))}/>
-          <select className="w-full rounded-md border px-3 py-2 text-sm" value={tankSetupForm.calibration_profile_id} onChange={(e)=>setTankSetupForm((p)=>({...p,calibration_profile_id:e.target.value}))}><option value="">Select profile</option>{profiles.map((profile)=><option key={profile.id} value={profile.id}>{profile.name} ({profile.profileKey})</option>)}</select>
+          <select className="w-full rounded-md border px-3 py-2 text-sm" value={tankSetupForm.calibration_mode} onChange={(e)=>setTankSetupForm((p)=>({...p,calibration_mode:e.target.value}))}>
+            <option value="verified_profile">Verified calibration profile</option>
+            <option value="manual_table">Manual calibration table</option>
+            <option value="historical_emptying">Historical empty-tank data only</option>
+          </select>
+          {tankSetupForm.calibration_mode === "historical_emptying" ? <p className="rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">No formal calibration table. Owner can record empty-tank history points. Exact only at recorded CMS anchors.</p> : null}
+          {tankSetupForm.calibration_mode !== "historical_emptying" ? <select className="w-full rounded-md border px-3 py-2 text-sm" value={tankSetupForm.calibration_profile_id} onChange={(e)=>setTankSetupForm((p)=>({...p,calibration_profile_id:e.target.value}))}><option value="">Select profile</option>{profiles.map((profile)=><option key={profile.id} value={profile.id}>{profile.name} ({profile.profileKey})</option>)}</select> : null}
           <Input type="number" placeholder="Reorder threshold liters" value={tankSetupForm.reorder_threshold_liters} onChange={(e)=>setTankSetupForm((p)=>({...p,reorder_threshold_liters:e.target.value}))}/>
           <Input type="number" placeholder="Variance tolerance liters" value={tankSetupForm.variance_tolerance_liters} onChange={(e)=>setTankSetupForm((p)=>({...p,variance_tolerance_liters:e.target.value}))}/>
           <Button type="submit" disabled={!canSaveTankSetup}>{editingTankId ? "Save update" : "Save assignment"}</Button>

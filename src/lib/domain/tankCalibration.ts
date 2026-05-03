@@ -1,4 +1,5 @@
 export type TankFormulaType = "horizontal_cylinder" | "manual_table";
+export type TankCalibrationMode = "verified_profile" | "manual_table" | "historical_emptying";
 
 export type ManualCalibrationRow = { readingCm: number; liters: number };
 
@@ -112,6 +113,59 @@ export function calculateTankReconciliation(input: {
   const varianceLiters = closingLiters - expectedClosingLiters;
   const status = varianceLiters < -input.toleranceLiters ? "short" : varianceLiters > input.toleranceLiters ? "surplus" : "balanced";
   return { openingLiters, closingLiters, expectedClosingLiters, varianceLiters, status };
+}
+
+export type HistoricalAnchorAuditInput = {
+  readingCm: number;
+  actualPulledLiters: number;
+  remainingAfterPulloutLiters?: number;
+  toleranceLiters: number;
+  expectedLiters?: number | null;
+};
+
+export function calculateHistoricalAnchorAudit(input: HistoricalAnchorAuditInput) {
+  const observedLiters = input.actualPulledLiters + (input.remainingAfterPulloutLiters ?? 0);
+  if (input.expectedLiters == null) {
+    return {
+      readingCm: input.readingCm,
+      observedLiters,
+      expectedLiters: null,
+      varianceLiters: null,
+      status: "anchor_only" as const,
+      confidence: "exact_anchor" as const
+    };
+  }
+
+  const varianceLiters = observedLiters - input.expectedLiters;
+  const status = varianceLiters > input.toleranceLiters ? "surplus" : varianceLiters < -input.toleranceLiters ? "short" : "balanced";
+  return {
+    readingCm: input.readingCm,
+    observedLiters,
+    expectedLiters: input.expectedLiters,
+    varianceLiters,
+    status,
+    confidence: "exact_anchor" as const
+  };
+}
+
+export type HistoricalCalibrationPoint = { readingCm: number; observedLiters: number };
+
+export function getHistoricalLitersEstimate(points: HistoricalCalibrationPoint[], readingCm: number):
+  | { status: "exact_anchor"; liters: number }
+  | { status: "interpolated_estimate"; liters: number }
+  | { status: "unavailable"; liters: null } {
+  const sorted = [...points].sort((a, b) => a.readingCm - b.readingCm);
+  const exact = sorted.find((point) => Math.abs(point.readingCm - readingCm) <= EPSILON);
+  if (exact) return { status: "exact_anchor", liters: exact.observedLiters };
+  if (sorted.length < 2) return { status: "unavailable", liters: null };
+
+  const upperIndex = sorted.findIndex((point) => point.readingCm > readingCm);
+  if (upperIndex <= 0) return { status: "unavailable", liters: null };
+  const lower = sorted[upperIndex - 1];
+  const upper = sorted[upperIndex];
+  if (!upper) return { status: "unavailable", liters: null };
+  const slope = (upper.observedLiters - lower.observedLiters) / (upper.readingCm - lower.readingCm);
+  return { status: "interpolated_estimate", liters: lower.observedLiters + slope * (readingCm - lower.readingCm) };
 }
 
 export const VERIFIED_TANK_PROFILES: TankCalibrationProfile[] = [

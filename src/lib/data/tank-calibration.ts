@@ -8,7 +8,8 @@ export type StationTankRecord = {
   station_name: string;
   product_type: string;
   tank_name: string;
-  calibration_profile_id: string;
+  calibration_profile_id: string | null;
+  calibration_mode: "verified_profile" | "manual_table" | "historical_emptying";
   reorder_threshold_liters: number | null;
   variance_tolerance_liters: number | null;
   profile_key: string;
@@ -123,9 +124,7 @@ export async function listStationTanks(): Promise<StationTankRecord[]> {
   const supabase = createSupabaseBrowserClient();
   const { data, error } = await supabase
     .from("station_tanks")
-    .select(
-      "id, station_id, product_type, tank_name, reorder_threshold_liters, variance_tolerance_liters, fuel_stations!inner(name), tank_calibration_profiles!inner(id, profile_key, name, max_dipstick_cm, calculated_full_liters)"
-    )
+    .select("id, station_id, product_type, tank_name, calibration_mode, calibration_profile_id, reorder_threshold_liters, variance_tolerance_liters, fuel_stations!inner(name), tank_calibration_profiles(id, profile_key, name, max_dipstick_cm, calculated_full_liters)")
     .eq("active", true)
     .is("archived_at", null)
     .order("created_at", { ascending: true });
@@ -136,13 +135,14 @@ export async function listStationTanks(): Promise<StationTankRecord[]> {
     station_name: row.fuel_stations?.name ?? "Unknown station",
     product_type: row.product_type,
     tank_name: row.tank_name,
-    calibration_profile_id: row.tank_calibration_profiles.id,
+    calibration_mode: row.calibration_mode ?? "verified_profile",
+    calibration_profile_id: row.calibration_profile_id ?? null,
     reorder_threshold_liters: row.reorder_threshold_liters == null ? null : Number(row.reorder_threshold_liters),
     variance_tolerance_liters: row.variance_tolerance_liters == null ? null : Number(row.variance_tolerance_liters),
-    profile_key: row.tank_calibration_profiles.profile_key,
-    profile_name: row.tank_calibration_profiles.name,
-    max_dipstick_cm: Number(row.tank_calibration_profiles.max_dipstick_cm),
-    calculated_full_liters: Number(row.tank_calibration_profiles.calculated_full_liters)
+    profile_key: row.tank_calibration_profiles?.profile_key ?? "",
+    profile_name: row.tank_calibration_profiles?.name ?? "No calibration profile",
+    max_dipstick_cm: Number(row.tank_calibration_profiles?.max_dipstick_cm ?? 0),
+    calculated_full_liters: Number(row.tank_calibration_profiles?.calculated_full_liters ?? 0)
   }));
 }
 
@@ -180,7 +180,8 @@ export async function createOrUpdateStationTank(payload: {
   station_id: string;
   product_type: string;
   tank_name: string;
-  calibration_profile_id: string;
+  calibration_profile_id: string | null;
+  calibration_mode: "verified_profile" | "manual_table" | "historical_emptying";
   reorder_threshold_liters?: number | null;
   variance_tolerance_liters?: number | null;
 }) {
@@ -190,7 +191,8 @@ export async function createOrUpdateStationTank(payload: {
     station_id: payload.station_id,
     product_type: payload.product_type,
     tank_name: payload.tank_name,
-    calibration_profile_id: await resolveCalibrationProfileId(payload.calibration_profile_id),
+    calibration_mode: payload.calibration_mode,
+    calibration_profile_id: payload.calibration_profile_id ? await resolveCalibrationProfileId(payload.calibration_profile_id) : null,
     reorder_threshold_liters: payload.reorder_threshold_liters ?? null,
     variance_tolerance_liters: payload.variance_tolerance_liters ?? null,
     active: true
@@ -252,6 +254,33 @@ export async function saveTankCrossCheck(payload: {
   if (!canUseLiveData()) throw new Error("Supabase is not configured");
   const supabase = createSupabaseBrowserClient();
   const { data, error } = await supabase.from("tank_reconciliation_audits").insert(payload).select("id").single();
+  if (error) throw error;
+  return data?.id as string;
+}
+
+export type EmpiricalCalibrationPointInput = {
+  station_tank_id: string;
+  audit_date: string;
+  reading_cm: number;
+  actual_pulled_liters: number;
+  remaining_after_pullout_liters?: number;
+  observed_liters: number;
+  base_calibration_profile_id?: string | null;
+  base_expected_liters?: number | null;
+  variance_liters?: number | null;
+  status: "balanced" | "short" | "surplus" | "anchor_only";
+  confidence?: "exact_at_anchor";
+  notes?: string | null;
+};
+
+export async function saveEmpiricalCalibrationPoint(payload: EmpiricalCalibrationPointInput) {
+  if (!canUseLiveData()) throw new Error("Supabase is not configured");
+  const supabase = createSupabaseBrowserClient();
+  const { data, error } = await supabase.from("tank_empirical_calibration_points").insert({
+    ...payload,
+    remaining_after_pullout_liters: payload.remaining_after_pullout_liters ?? 0,
+    confidence: payload.confidence ?? "exact_at_anchor"
+  }).select("id").single();
   if (error) throw error;
   return data?.id as string;
 }
