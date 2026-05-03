@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   VERIFIED_TANK_PROFILES,
   calculateTankReconciliation,
+  calculateHistoricalAnchorAudit,
   dipstickCmFromLiters,
+  getHistoricalLitersEstimate,
   litersFromDipstickCm,
   roundedLitersFromDipstickCm,
   type TankCalibrationProfile
@@ -69,5 +71,26 @@ describe("tank calibration anchors", () => {
     const result = calculateTankReconciliation({ profile: p16, openingReadingCm: 120, closingReadingCm: 118, deliveryLiters: 2000, pumpMeterSalesLiters: 1900, toleranceLiters: 50 });
     expect(result.status).toBeTypeOf("string");
     expect(result.expectedClosingLiters).toBeCloseTo(result.openingLiters + 100, 6);
+  });
+
+  it("computes historical audit surplus against expected liters", () => {
+    const result = calculateHistoricalAnchorAudit({ readingCm: 15, actualPulledLiters: 825, remainingAfterPulloutLiters: 0, expectedLiters: 525, toleranceLiters: 10 });
+    expect(result.observedLiters).toBe(825);
+    expect(result.varianceLiters).toBe(300);
+    expect(result.status).toBe("surplus");
+  });
+
+  it("supports anchor-only historical audit when base profile is absent", () => {
+    const result = calculateHistoricalAnchorAudit({ readingCm: 15, actualPulledLiters: 825, toleranceLiters: 10 });
+    expect(result.expectedLiters).toBeNull();
+    expect(result.varianceLiters).toBeNull();
+    expect(result.status).toBe("anchor_only");
+  });
+
+  it("interpolates only within bracketing historical points and does not extrapolate", () => {
+    const points = [{ readingCm: 10, observedLiters: 500 }, { readingCm: 20, observedLiters: 900 }];
+    expect(getHistoricalLitersEstimate(points, 10)).toEqual({ status: "exact_anchor", liters: 500 });
+    expect(getHistoricalLitersEstimate(points, 15)).toEqual({ status: "interpolated_estimate", liters: 700 });
+    expect(getHistoricalLitersEstimate(points, 25)).toEqual({ status: "unavailable", liters: null });
   });
 });

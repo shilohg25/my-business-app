@@ -54,7 +54,7 @@ describe("tank calibration integration helpers", () => {
       throw new Error(`Unexpected table ${table}`);
     });
 
-    await createOrUpdateStationTank({ station_id: "22222222-2222-4222-8222-222222222222", product_type: "DIESEL", tank_name: "Main tank", calibration_profile_id: "ugt_16kl_202x488" });
+    await createOrUpdateStationTank({ station_id: "22222222-2222-4222-8222-222222222222", product_type: "DIESEL", tank_name: "Main tank", calibration_mode: "verified_profile", calibration_profile_id: "ugt_16kl_202x488" });
     expect(insertMock).toHaveBeenCalledWith(expect.objectContaining({ calibration_profile_id: resolvedId }));
   });
 
@@ -86,6 +86,8 @@ describe("tank calibration integration helpers", () => {
                     station_id: "station-1",
                     product_type: "DIESEL",
                     tank_name: "Main",
+                    calibration_mode: "verified_profile",
+                    calibration_profile_id: profile.id,
                     reorder_threshold_liters: 5000,
                     variance_tolerance_liters: 200,
                     fuel_stations: { name: "Station A" },
