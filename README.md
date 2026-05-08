@@ -47,3 +47,29 @@ npm test
 - `docs/PRIORITY_ROADMAP.md`
 - `docs/ROLE_ACCESS.md`
 - `docs/MOBILE_APP_LATER.md`
+
+## Dynamic Next.js development in Codespaces
+1. Open this repository in GitHub Codespaces.
+2. Create `.env.local` from `.env.example`.
+3. Add values for:
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+4. Run:
+   - `npm install`
+   - `npm run dev:codespace`
+5. Open forwarded port `3000`.
+6. Visit `/inventory/fuel/`.
+7. Apply Supabase migrations separately via Supabase SQL Editor or Supabase CLI.
+
+## Vercel deployment
+1. Import this GitHub repo into Vercel.
+2. Add environment variables:
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+3. Build command: `npm run build`
+4. Framework preset: `Next.js`
+5. Production URL will run at root (not `/my-business-app`).
+
+> Warning: GitHub Pages static hosting is no longer the recommended production target because this app now supports dynamic server-side routes.

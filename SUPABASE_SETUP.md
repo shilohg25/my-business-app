@@ -1,6 +1,6 @@
 # Supabase setup for AKY Fuel Ops
 
-This app is a static GitHub Pages frontend. Supabase is the backend. Critical create/import validation is handled by PostgreSQL RPC functions in `supabase/migrations/004_fuel_ops_rpc.sql`.
+This app now runs as a dynamic Next.js application (local/Codespaces/Vercel) with Supabase as backend.
 
 ## 1. Run the SQL schema
 
@@ -13,23 +13,11 @@ Open your Supabase project.
 5. Paste the full contents of `supabase/RUN_THIS_IN_SUPABASE.sql`.
 6. Click **Run**.
 
-The SQL creates:
+Then apply the latest files in `supabase/migrations` (including tank calibration migrations/RPC).
 
-- fuel station tables
-- shift report tables
-- pump and product tables
-- credit receipt, expense, cash count, and lubricant tables
-- import batch and export tracking tables
-- RLS policies
-- audit triggers using the existing `audit_logs` table
-- `fuel_calculate_shift_report(payload jsonb)`
-- `fuel_commit_shift_report(payload jsonb, import_context jsonb)`
+## 2. Ensure your profile role is set
 
-## 2. Make sure your user profile role is set
-
-The app uses your existing `profiles` table. Your signed-in user must have role `Owner` or `Admin` to create reports.
-
-In **SQL Editor**, run this check:
+The app uses `public.profiles`. Owner-only operations require `role = 'Owner'` and `is_active = true`.
 
 ```sql
 select id, username, role, is_active
@@ -37,7 +25,7 @@ from public.profiles
 order by created_at desc;
 ```
 
-To make one user the owner, replace the email with your login email and run:
+To make one user the owner (replace email):
 
 ```sql
 update public.profiles p
@@ -47,85 +35,47 @@ where p.id = u.id
   and lower(u.email) = lower('YOUR_EMAIL_HERE');
 ```
 
-## 3. Get your Supabase URL and anon/publishable key
+## 3. Environment variables
 
-In Supabase:
-
-1. Go to **Project Settings**.
-2. Click **API** or **API Keys**.
-3. Copy **Project URL**.
-4. Copy either the **anon public** key or a **publishable** key.
-
-Do not use the service-role key in this GitHub Pages frontend.
-
-## 4. Add GitHub secrets for deployment
-
-In GitHub:
-
-1. Open `shilohg25/my-business-app`.
-2. Go to **Settings**.
-3. Go to **Secrets and variables**.
-4. Click **Actions**.
-5. Click **New repository secret**.
-6. Add these two secrets:
-
-```txt
-NEXT_PUBLIC_SUPABASE_URL
-```
-
-Value:
-
-```txt
-https://YOUR_PROJECT_REF.supabase.co
-```
-
-Then add:
-
-```txt
-NEXT_PUBLIC_SUPABASE_ANON_KEY
-```
-
-Value:
-
-```txt
-YOUR_SUPABASE_ANON_OR_PUBLISHABLE_KEY
-```
-
-## 5. Enable GitHub Pages via Actions
-
-In GitHub:
-
-1. Go to **Settings**.
-2. Click **Pages**.
-3. Under **Build and deployment**, set **Source** to **GitHub Actions**.
-4. Save.
-5. Go to **Actions**.
-6. Run **Deploy Next.js app to GitHub Pages**.
-
-The app URL is:
-
-```txt
-https://shilohg25.github.io/my-business-app/
-```
-
-## 6. Local development
-
-Create `.env.local` in the project root:
+Create `.env.local` from `.env.example` and set:
 
 ```txt
 NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_OR_PUBLISHABLE_KEY
+SUPABASE_SERVICE_ROLE_KEY=YOUR_SUPABASE_SERVICE_ROLE_KEY
 ```
 
-Then run:
+Important:
+- `SUPABASE_SERVICE_ROLE_KEY` is server-only.
+- Never prefix service role key with `NEXT_PUBLIC_`.
+- Never import server admin clients into client components.
 
-```bash
-npm install
-npm run dev
-```
+## 4. Dynamic Next.js development in Codespaces
 
-Open:
+1. Open repo in GitHub Codespaces.
+2. Create `.env.local` from `.env.example`.
+3. Set:
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+4. Run:
+   - `npm install`
+   - `npm run dev:codespace`
+5. Open forwarded port `3000`.
+6. Visit `/inventory/fuel/`.
+7. Apply Supabase migrations separately in SQL Editor or Supabase CLI.
 
-```txt
-http://localhost:3000
-```
+## 5. Vercel deployment
+
+1. Import `shilohg25/my-business-app` into Vercel.
+2. Add env vars:
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+3. Build command: `npm run build`
+4. Framework: `Next.js`
+5. Production URL is no longer `/my-business-app`.
+
+## 6. GitHub Pages note
+
+GitHub Pages static hosting is no longer recommended for production after this dynamic conversion.

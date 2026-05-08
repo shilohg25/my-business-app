@@ -1,4 +1,4 @@
-name: Deploy Next.js static export to GitHub Pages
+name: Deploy legacy static export to GitHub Pages (not recommended)
 
 on:
   push:
@@ -45,7 +45,7 @@ jobs:
       - name: Test
         run: npm test
 
-      - name: Build static export
+      - name: Build static export (legacy target)
         run: npm run build
 
       - name: Configure Pages
