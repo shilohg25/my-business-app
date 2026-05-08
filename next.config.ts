@@ -1,16 +1,10 @@
 import type { NextConfig } from "next";
 
-const repoName = "my-business-app";
-const isGitHubPages = process.env.GITHUB_ACTIONS === "true";
-
 const nextConfig: NextConfig = {
-  output: "export",
-  trailingSlash: true,
+  // Keep unoptimized images for compatibility; can be re-enabled for Vercel later.
   images: {
     unoptimized: true
-  },
-  basePath: isGitHubPages ? `/${repoName}` : "",
-  assetPrefix: isGitHubPages ? `/${repoName}/` : undefined
+  }
 };
 
 export default nextConfig;
