@@ -2,8 +2,6 @@ import { createClient, type Session, type SupabaseClient } from "@supabase/supab
 
 let browserClient: SupabaseClient | null = null;
 
-const githubPagesBasePath = "/my-business-app";
-
 export interface SupabaseEnv {
   url: string;
   anonKey: string;
@@ -163,26 +161,14 @@ export async function signOutOfSupabase() {
 }
 
 export function stripAppBasePath(path: string) {
-  if (path === githubPagesBasePath) return "/";
-  if (path.startsWith(`${githubPagesBasePath}/`)) return path.slice(githubPagesBasePath.length);
   return path;
 }
 
 export function currentAppPath() {
   if (typeof window === "undefined") return "/";
-  return `${stripAppBasePath(window.location.pathname)}${window.location.search}`;
+  return `${window.location.pathname}${window.location.search}`;
 }
 
 export function appPath(path: string) {
-  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-
-  if (typeof window === "undefined") {
-    return process.env.GITHUB_ACTIONS === "true" ? `${githubPagesBasePath}${normalizedPath}` : normalizedPath;
-  }
-
-  const isGitHubPagesPath =
-    window.location.pathname === githubPagesBasePath ||
-    window.location.pathname.startsWith(`${githubPagesBasePath}/`);
-
-  return `${isGitHubPagesPath ? githubPagesBasePath : ""}${normalizedPath}`;
+  return path.startsWith("/") ? path : `/${path}`;
 }
