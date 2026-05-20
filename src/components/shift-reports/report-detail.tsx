@@ -79,6 +79,23 @@ function formatValue(value: unknown, kind: "currency" | "number" | "liters" = "n
   return formatNumber(numeric, 2);
 }
 
+function formatOpeningSource(value: string | null | undefined, fallback: string | null | undefined) {
+  const raw = (value || fallback || "").trim();
+  if (!raw) return "-";
+
+  const labels: Record<string, string> = {
+    baseline: "Baseline",
+    previous_closing: "Previous closing",
+    mobile_submission: "Mobile submission",
+    web_manual: "Manual entry",
+    excel_import: "Legacy Excel import",
+    manual: "Manual",
+    source_backed: "Source-backed"
+  };
+
+  return labels[raw] ?? raw.replace(/_/g, " ");
+}
+
 type SummaryMetricProps = {
   label: string;
   value: string;
@@ -469,13 +486,18 @@ export function ReportDetail() {
                   <tr className="border-t border-slate-100" key={row.id}>
                     <td className="py-1.5">{row.pump_label_snapshot}</td>
                     <td className="py-1.5">{row.product_code_snapshot}</td>
-                    <td className="py-1.5">{row.source || "-"}</td>
+                    <td className="py-1.5">{formatOpeningSource(row.opening_reading_source, row.source)}</td>
                     <td className="py-1.5 text-right tabular-nums">{formatMeterReading(row.before_reading)}</td>
                     <td className="py-1.5 text-right tabular-nums">{formatMeterReading(row.after_reading)}</td>
                     <td className="py-1.5">
                       {closingEvidence?.signed_url ? (
-                        <a className="text-blue-700 underline" href={closingEvidence.signed_url} rel="noreferrer" target="_blank">
-                          View photo
+                        <a className="inline-flex items-center gap-2 text-blue-700 underline" href={closingEvidence.signed_url} rel="noreferrer" target="_blank">
+                          <img
+                            alt={`Closing evidence for ${row.pump_label_snapshot}`}
+                            className="h-10 w-10 rounded-md border border-slate-200 object-cover"
+                            src={closingEvidence.signed_url}
+                          />
+                          <span>View photo</span>
                         </a>
                       ) : (
                         <span className="text-amber-700">Missing photo evidence</span>

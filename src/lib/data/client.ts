@@ -46,6 +46,7 @@ export interface ShiftReportDetail extends Record<string, unknown> {
     liters_sold: number;
     calibration_liters: number;
     source: string;
+    opening_reading_source: string | null;
     created_at: string;
   }>;
   meterPhotoEvidence: Array<{
@@ -218,7 +219,7 @@ export async function fetchShiftReportDetail(reportId: string): Promise<ShiftRep
       .single(),
     supabase
       .from("fuel_meter_readings")
-      .select("id, pump_id, pump_label_snapshot, product_code_snapshot, before_reading, after_reading, liters_sold, calibration_liters, source, created_at")
+      .select("id, pump_id, pump_label_snapshot, product_code_snapshot, before_reading, after_reading, liters_sold, calibration_liters, source, opening_reading_source, created_at")
       .eq("shift_report_id", reportId)
       .order("created_at", { ascending: true }),
     supabase
@@ -271,7 +272,7 @@ export async function fetchShiftReportDetail(reportId: string): Promise<ShiftRep
   const signedEvidence = await Promise.all(
     evidenceRows.map(async (row) => {
       const signed = await supabase.storage.from(row.storage_bucket).createSignedUrl(row.storage_path, 60 * 60);
-      return { ...row, signed_url: signed.data?.signedUrl ?? null };
+      return { ...row, storage_path: "", signed_url: signed.data?.signedUrl ?? null };
     })
   );
 
