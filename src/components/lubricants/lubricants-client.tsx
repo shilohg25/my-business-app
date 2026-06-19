@@ -10,17 +10,11 @@ import { canUseLiveData } from "@/lib/data/client";
 import { fetchLubricantControlData } from "@/lib/data/lubricants";
 import { getSupabaseConfigurationState } from "@/lib/supabase/client";
 import { areFiltersDefault, getCurrentMonthDateRange } from "@/lib/utils/filters";
+import { formatDecimal } from "@/lib/utils/format";
 
 function asNumber(value: number | string | null | undefined) {
   const parsed = Number(value ?? Number.NaN);
   return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function formatNumber(value: number | string | null | undefined, digits = 2) {
-  const numericValue = Number(value ?? Number.NaN);
-  return Number.isFinite(numericValue)
-    ? numericValue.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits })
-    : "—";
 }
 
 function displayText(value: string | null | undefined) {
@@ -89,7 +83,7 @@ function StationSummaryChips({ totalSkus, totalUnits, lowStockCount }: Pick<Stat
   return (
     <div className="mt-2 flex flex-wrap gap-2">
       <Badge>Total SKUs: {totalSkus}</Badge>
-      <Badge>Total Units: {formatNumber(totalUnits)}</Badge>
+      <Badge>Total Units: {formatDecimal(totalUnits, 2, "—")}</Badge>
       <Badge className={lowStockCount > 0 ? "border-amber-200 bg-amber-50 text-amber-700" : undefined}>Low Stock: {lowStockCount}</Badge>
     </div>
   );
@@ -115,8 +109,8 @@ function StationInventoryTable({ rows }: { rows: StationInventoryRow[] }) {
               <TableRow key={row.id}>
                 <TableCell>{displayText(row.sku)}</TableCell>
                 <TableCell>{displayText(row.product_name)}</TableCell>
-                <TableCell className="text-right tabular-nums">{formatNumber(row.quantity_on_hand)}</TableCell>
-                <TableCell className="text-right tabular-nums text-slate-600">{formatNumber(row.reorder_level)}</TableCell>
+                <TableCell className="text-right tabular-nums">{formatDecimal(row.quantity_on_hand, 2, "—")}</TableCell>
+                <TableCell className="text-right tabular-nums text-slate-600">{formatDecimal(row.reorder_level, 2, "—")}</TableCell>
                 <TableCell>
                   <StockStatusBadge status={stockStatus} />
                 </TableCell>
@@ -178,7 +172,7 @@ function LubricantMovementTable({ movements }: { movements: MovementRow[] }) {
               <TableCell>
                 <MovementTypeBadge movementType={row.movement_type} />
               </TableCell>
-              <TableCell className="text-right tabular-nums">{formatNumber(row.quantity)}</TableCell>
+              <TableCell className="text-right tabular-nums">{formatDecimal(row.quantity, 2, "—")}</TableCell>
               <TableCell className="text-slate-600">{displayText(row.from_location_name)}</TableCell>
               <TableCell className="text-slate-600">{displayText(row.to_location_name)}</TableCell>
               <TableCell className="text-slate-600">{displayText(row.reference)}</TableCell>

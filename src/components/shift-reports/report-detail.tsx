@@ -5,34 +5,9 @@ import { useSearchParams } from "next/navigation";
 import { canUseLiveData, fetchShiftReportDetail, markReportStatus, type ShiftReportDetail } from "@/lib/data/client";
 import { appPath, getSupabaseConfigurationState } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/utils";
+import { formatDecimal, formatFixedLiters } from "@/lib/utils/format";
 import { formatSignedCurrency, getDiscrepancyLabel } from "@/lib/analytics/discrepancy";
 import { getShiftReportSourceLabel } from "@/lib/domain/source-labels";
-
-function formatNumber(value: number | string | null | undefined, digits = 2) {
-  const numeric = Number(value ?? Number.NaN);
-  if (!Number.isFinite(numeric)) return "-";
-  return numeric.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
-}
-
-function formatMeterReading(value: number | string | null | undefined) {
-  const numeric = Number(value ?? Number.NaN);
-  if (!Number.isFinite(numeric)) return "-";
-  return numeric.toLocaleString("en-US", {
-    minimumFractionDigits: 3,
-    maximumFractionDigits: 3,
-    useGrouping: false
-  });
-}
-
-function formatLiters(value: number | string | null | undefined) {
-  const numeric = Number(value ?? Number.NaN);
-  if (!Number.isFinite(numeric)) return "-";
-  return numeric.toLocaleString("en-US", {
-    minimumFractionDigits: 3,
-    maximumFractionDigits: 3,
-    useGrouping: false
-  });
-}
 
 function formatMoney(value: number | string | null | undefined) {
   const numeric = Number(value ?? Number.NaN);
@@ -75,8 +50,8 @@ function formatValue(value: unknown, kind: "currency" | "number" | "liters" = "n
   if (!Number.isFinite(numeric)) return "-";
 
   if (kind === "currency") return formatMoney(numeric);
-  if (kind === "liters") return formatLiters(numeric);
-  return formatNumber(numeric, 2);
+  if (kind === "liters") return formatFixedLiters(numeric);
+  return formatDecimal(numeric, 2);
 }
 
 function formatOpeningSource(value: string | null | undefined, fallback: string | null | undefined) {
@@ -487,8 +462,8 @@ export function ReportDetail() {
                     <td className="py-1.5">{row.pump_label_snapshot}</td>
                     <td className="py-1.5">{row.product_code_snapshot}</td>
                     <td className="py-1.5">{formatOpeningSource(row.opening_reading_source, row.source)}</td>
-                    <td className="py-1.5 text-right tabular-nums">{formatMeterReading(row.before_reading)}</td>
-                    <td className="py-1.5 text-right tabular-nums">{formatMeterReading(row.after_reading)}</td>
+                    <td className="py-1.5 text-right tabular-nums">{formatFixedLiters(row.before_reading)}</td>
+                    <td className="py-1.5 text-right tabular-nums">{formatFixedLiters(row.after_reading)}</td>
                     <td className="py-1.5">
                       {closingEvidence?.signed_url ? (
                         <a className="inline-flex items-center gap-2 text-blue-700 underline" href={closingEvidence.signed_url} rel="noreferrer" target="_blank">
@@ -504,8 +479,8 @@ export function ReportDetail() {
                       )}
                     </td>
                     <td className="py-1.5">{closingEvidence?.ocr_status ?? "missing"}</td>
-                    <td className="py-1.5 text-right tabular-nums">{formatLiters(row.liters_sold)}</td>
-                    <td className="py-1.5 text-right tabular-nums">{formatLiters(row.calibration_liters)}</td>
+                    <td className="py-1.5 text-right tabular-nums">{formatFixedLiters(row.liters_sold)}</td>
+                    <td className="py-1.5 text-right tabular-nums">{formatFixedLiters(row.calibration_liters)}</td>
                   </tr>
                 );
               })}
@@ -529,7 +504,7 @@ export function ReportDetail() {
                   <td className="py-1.5">{row.company_name}</td>
                   <td className="py-1.5">{row.receipt_number || "-"}</td>
                   <td className="py-1.5">{row.product_code_snapshot}</td>
-                  <td className="py-1.5 text-right tabular-nums">{formatLiters(row.liters)}</td>
+                  <td className="py-1.5 text-right tabular-nums">{formatFixedLiters(row.liters)}</td>
                   <td className="py-1.5 text-right tabular-nums">{formatMoney(row.amount)}</td>
                 </tr>
               ))}
@@ -573,7 +548,7 @@ export function ReportDetail() {
               {detail.cashCounts.map((row) => (
                 <tr className="border-t border-slate-100" key={row.id}>
                   <td className="py-1.5">{formatCurrency(Number(row.denomination ?? 0))}</td>
-                  <td className="py-1.5 text-right tabular-nums">{formatNumber(row.quantity, 0)}</td>
+                  <td className="py-1.5 text-right tabular-nums">{formatDecimal(row.quantity, 0)}</td>
                   <td className="py-1.5 text-right tabular-nums">{formatCurrency(Number(row.amount ?? 0))}</td>
                   <td className="py-1.5">{row.note ?? "-"}</td>
                 </tr>
@@ -583,7 +558,7 @@ export function ReportDetail() {
 
           <SectionCard title="Lubricant sales" isEmpty={detail.lubricantSales.length === 0} emptyMessage="No lubricant sales recorded for this shift.">
             <p className="mb-2 text-xs text-slate-500">Total lubricant sales amount: <span className="font-semibold text-slate-800">{formatCurrency(detail.lubricantSales.reduce((sum, row) => sum + Number(row.amount ?? 0), 0))}</span></p>
-            <p className="mb-2 text-xs text-slate-500">Total lubricant units: <span className="font-semibold text-slate-800">{formatNumber(detail.lubricantSales.reduce((sum, row) => sum + Number(row.quantity ?? 0), 0), 2)}</span></p>
+            <p className="mb-2 text-xs text-slate-500">Total lubricant units: <span className="font-semibold text-slate-800">{formatDecimal(detail.lubricantSales.reduce((sum, row) => sum + Number(row.quantity ?? 0), 0), 2)}</span></p>
             <DataTable
               headers={
                 <tr>
@@ -597,7 +572,7 @@ export function ReportDetail() {
               {detail.lubricantSales.map((row) => (
                 <tr className="border-t border-slate-100" key={row.id}>
                   <td className="py-1.5">{row.product_name_snapshot}</td>
-                  <td className="py-1.5 text-right tabular-nums">{formatNumber(row.quantity, 2)}</td>
+                  <td className="py-1.5 text-right tabular-nums">{formatDecimal(row.quantity, 2)}</td>
                   <td className="py-1.5 text-right tabular-nums">{formatCurrency(Number(row.unit_price ?? 0))}</td>
                   <td className="py-1.5 text-right tabular-nums">{formatCurrency(Number(row.amount ?? 0))}</td>
                 </tr>
