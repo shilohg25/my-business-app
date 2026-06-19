@@ -7,16 +7,13 @@ import { canUseLiveData } from "@/lib/data/client";
 import { fetchExecutiveAnalytics } from "@/lib/data/executive";
 import { getSupabaseConfigurationState } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/utils";
+import { formatFixedLiters } from "@/lib/utils/format";
 import { formatSignedCurrency } from "@/lib/analytics/discrepancy";
 import { fetchLubricantControlData } from "@/lib/data/lubricants";
 import { fetchFuelInventoryDashboard } from "@/lib/data/fuel-inventory";
 import { fetchStationExpenses } from "@/lib/data/expenses";
 import { buildExpenseAnalytics } from "@/lib/analytics/expenses";
 import { areFiltersDefault, getCurrentMonthDateRange } from "@/lib/utils/filters";
-
-function formatLiters(value: number) {
-  return value.toLocaleString("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3, useGrouping: false });
-}
 
 function formatDay(value: string) {
   const parsed = new Date(`${value}T00:00:00Z`);
@@ -148,7 +145,7 @@ export function ManagementReportsClient() {
               <thead className="text-left text-slate-500"><tr><th className="py-2">Product</th><th className="text-right">Gross liters out</th><th className="text-right">Credit liters</th><th className="text-right">Calibration liters</th><th className="text-right">Net cash liters</th></tr></thead>
               <tbody>
                 {productRows.map((row) => (
-                  <tr className="border-t" key={row.product}><td className="py-2">{row.product}</td><td className="text-right">{formatLiters(row.grossLitersOut)}</td><td className="text-right">{formatLiters(row.creditLiters)}</td><td className="text-right">{formatLiters(row.calibrationLiters)}</td><td className="text-right">{formatLiters(row.netCashLiters)}</td></tr>
+                  <tr className="border-t" key={row.product}><td className="py-2">{row.product}</td><td className="text-right">{formatFixedLiters(row.grossLitersOut)}</td><td className="text-right">{formatFixedLiters(row.creditLiters)}</td><td className="text-right">{formatFixedLiters(row.calibrationLiters)}</td><td className="text-right">{formatFixedLiters(row.netCashLiters)}</td></tr>
                 ))}
               </tbody>
             </table>
@@ -210,9 +207,9 @@ export function ManagementReportsClient() {
                     <td className="text-right">{formatCurrency(row.totalCashCount)}</td>
                     <td className="text-right">{formatCurrency(row.totalNetRemittance)}</td>
                     <td className="text-right">{formatSignedCurrency(row.totalDiscrepancy)}</td>
-                    <td className="text-right">{formatLiters(row.dieselGrossLiters)}</td>
-                    <td className="text-right">{formatLiters(row.specialGrossLiters)}</td>
-                    <td className="text-right">{formatLiters(row.unleadedGrossLiters)}</td>
+                    <td className="text-right">{formatFixedLiters(row.dieselGrossLiters)}</td>
+                    <td className="text-right">{formatFixedLiters(row.specialGrossLiters)}</td>
+                    <td className="text-right">{formatFixedLiters(row.unleadedGrossLiters)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -258,14 +255,14 @@ export function ManagementReportsClient() {
 
       <Card>
         <CardHeader><CardTitle>Fuel variance by station/product</CardTitle></CardHeader>
-        <CardContent><div className="overflow-x-auto"><table className="w-full text-sm"><thead className="text-left text-slate-500"><tr><th className="py-2">Station</th><th>Product</th><th className="text-right">Delivered</th><th className="text-right">Meter out</th><th className="text-right">Expected</th><th className="text-right">Actual latest</th><th className="text-right">Variance</th><th>Baseline</th></tr></thead><tbody>{(fuelInventory?.summaryRows ?? []).map((row) => (<tr className="border-t" key={`${row.station_id}-${row.product}`}><td className="py-2">{row.station_name ?? "-"}</td><td>{row.product}</td><td className="text-right">{formatLiters(row.delivered_liters)}</td><td className="text-right">{formatLiters(row.meter_liters_out)}</td><td className="text-right">{formatLiters(row.expected_ending_liters)}</td><td className="text-right">{formatLiters(row.latest_actual_ending_liters)}</td><td className="text-right">{formatLiters(row.variance_liters)}</td><td>{row.baseline_status}</td></tr>))}</tbody></table></div></CardContent>
+        <CardContent><div className="overflow-x-auto"><table className="w-full text-sm"><thead className="text-left text-slate-500"><tr><th className="py-2">Station</th><th>Product</th><th className="text-right">Delivered</th><th className="text-right">Meter out</th><th className="text-right">Expected</th><th className="text-right">Actual latest</th><th className="text-right">Variance</th><th>Baseline</th></tr></thead><tbody>{(fuelInventory?.summaryRows ?? []).map((row) => (<tr className="border-t" key={`${row.station_id}-${row.product}`}><td className="py-2">{row.station_name ?? "-"}</td><td>{row.product}</td><td className="text-right">{formatFixedLiters(row.delivered_liters)}</td><td className="text-right">{formatFixedLiters(row.meter_liters_out)}</td><td className="text-right">{formatFixedLiters(row.expected_ending_liters)}</td><td className="text-right">{formatFixedLiters(row.latest_actual_ending_liters)}</td><td className="text-right">{formatFixedLiters(row.variance_liters)}</td><td>{row.baseline_status}</td></tr>))}</tbody></table></div></CardContent>
       </Card>
 
       <Card>
         <CardHeader><CardTitle>Fuel baseline and movement overview</CardTitle></CardHeader>
         <CardContent className="space-y-1 text-sm">
           <p>Stations missing baseline: <span className="font-semibold">{fuelInventory?.totals?.missingBaselineStations ?? 0}</span></p>
-          <p>Fuel deliveries vs meter liters out: <span className="font-semibold">{(fuelInventory?.deliveries.length ?? 0)} deliveries / {formatLiters(fuelInventory?.totals?.totalMeterLitersOut ?? 0)} liters out</span></p>
+          <p>Fuel deliveries vs meter liters out: <span className="font-semibold">{(fuelInventory?.deliveries.length ?? 0)} deliveries / {formatFixedLiters(fuelInventory?.totals?.totalMeterLitersOut ?? 0)} liters out</span></p>
         </CardContent>
       </Card>
 

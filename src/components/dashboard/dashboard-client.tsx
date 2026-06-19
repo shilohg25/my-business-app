@@ -5,6 +5,7 @@ import { canUseLiveData } from "@/lib/data/client";
 import { fetchExecutiveAnalytics } from "@/lib/data/executive";
 import { appPath, getSupabaseConfigurationState } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/utils";
+import { formatFixedLiters } from "@/lib/utils/format";
 import { formatSignedCurrency } from "@/lib/analytics/discrepancy";
 import { fetchLubricantControlData } from "@/lib/data/lubricants";
 import { fetchFuelInventoryDashboard } from "@/lib/data/fuel-inventory";
@@ -12,10 +13,6 @@ import { fetchStationExpenses } from "@/lib/data/expenses";
 import { buildExpenseAnalytics } from "@/lib/analytics/expenses";
 import { MetricGrid, type DashboardMetric } from "@/components/dashboard/sections/metric-grid";
 import { startOfMonthIso, todayIso } from "@/lib/config/dashboard";
-
-function formatLiters(value: number) {
-  return value.toLocaleString("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3, useGrouping: false });
-}
 
 export function DashboardClient() {
   const liveData = canUseLiveData();
@@ -70,13 +67,13 @@ export function DashboardClient() {
   ];
   const inventoryMetrics: DashboardMetric[] = [
     { label: "Fuel deliveries this month", value: String(fuelInventory?.deliveries.length ?? 0) },
-    { label: "Diesel variance liters", value: formatLiters(fuelInventory?.totals?.dieselVariance ?? 0) },
-    { label: "Special variance liters", value: formatLiters(fuelInventory?.totals?.specialVariance ?? 0) },
-    { label: "Unleaded variance liters", value: formatLiters(fuelInventory?.totals?.unleadedVariance ?? 0) },
+    { label: "Diesel variance liters", value: formatFixedLiters(fuelInventory?.totals?.dieselVariance ?? 0) },
+    { label: "Special variance liters", value: formatFixedLiters(fuelInventory?.totals?.specialVariance ?? 0) },
+    { label: "Unleaded variance liters", value: formatFixedLiters(fuelInventory?.totals?.unleadedVariance ?? 0) },
     { label: "Stations missing fuel baseline", value: String(fuelInventory?.totals?.missingBaselineStations ?? 0) },
     { label: "Fuel shortage alerts", value: String(fuelInventory?.totals?.shortageAlerts ?? 0) },
-    { label: "Diesel gross liters out", value: formatLiters(liters.DIESEL?.grossLitersOut ?? 0) },
-    { label: "Unleaded gross liters out", value: formatLiters(liters.UNLEADED?.grossLitersOut ?? 0) }
+    { label: "Diesel gross liters out", value: formatFixedLiters(liters.DIESEL?.grossLitersOut ?? 0) },
+    { label: "Unleaded gross liters out", value: formatFixedLiters(liters.UNLEADED?.grossLitersOut ?? 0) }
   ];
 
   return (
